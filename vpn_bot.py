@@ -621,7 +621,7 @@ def query_handler(call):
         bot.edit_message_text(text, uid, call.message.id, 
                              reply_markup=kb, parse_mode="Markdown")
     
-        elif call.data.startswith("show_key_"):
+    elif call.data.startswith("show_key_"):  # ← ЭТО ДОЛЖНО БЫТЬ НА УРОВНЕ С ДРУГИМИ ELIF
         u_uuid = call.data.replace("show_key_", "")
         db.cursor.execute("SELECT end_date, email FROM keys WHERE uuid=? AND user_id=?", (u_uuid, uid))
         row = db.cursor.fetchone()
