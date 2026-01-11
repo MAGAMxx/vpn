@@ -272,16 +272,13 @@ def generate_app_links(u_uuid):
     vless_link = generate_vless_link(u_uuid)
     
     # Кодируем для URL
-    import urllib.parse
     encoded_link = urllib.parse.quote(vless_link)
     
     # Ссылки для разных приложений
     return {
-        "vless": vless_link,
-        "happ": f"happ://import-config/{encoded_link}",
-        "hiddify": f"hiddify://import-subscription/{encoded_link}",
-        "v2rayng": f"v2rayng://import-conf/{encoded_link}",
-        "clash": f"clash://install-config?url={encoded_link}",
+        "vless": vless_link,  # Основная ссылка для копирования
+        "happ": vless_link,   # HAPP+ использует ту же ссылку
+        "hiddify": vless_link, # Hiddify тоже использует vless ссылку
         "universal": f"https://t.me/{bot.get_me().username}?start=link{encoded_link}"
     }
 
@@ -293,38 +290,17 @@ def generate_subscription_link(user_id):
     
     uuid_str = active_key[1]
     
-    # Создаем подписку с одним сервером
+    # Создаем подписку в формате для приложений
+    vless_link = generate_vless_link(uuid_str)
+    
+    # Кодируем ссылку в base64 (стандартный формат для подписок)
     import base64
-    import json
+    encoded_link = base64.urlsafe_b64encode(vless_link.encode()).decode()
     
-    config = {
-        "version": "2.0",
-        "servers": [{
-            "remarks": "🔥 MAGAMIX VPN | Нидерланды 🇳🇱",
-            "address": SERVER_IP,
-            "port": SERVER_PORT,
-            "id": uuid_str,
-            "flow": "xtls-rprx-vision",
-            "encryption": "none",
-            "network": "tcp",
-            "type": "none",
-            "host": SNI,
-            "path": "/",
-            "tls": "reality",
-            "sni": SNI,
-            "fp": FP,
-            "alpn": "",
-            "pbk": PBK,
-            "sid": SID
-        }]
-    }
+    # Ссылка подписки (используем HTTPS для поддержки Telegram)
+    subscription_url = f"https://{SERVER_IP}:{SERVER_PORT}/sub/{uuid_str}?config={encoded_link}"
     
-    config_json = json.dumps(config, ensure_ascii=False)
-    encoded_config = base64.b64encode(config_json.encode()).decode()
-    
-    # Ссылка подписки
-    subscription_url = f"https://{SERVER_IP}/sub/{uuid_str}?config={encoded_config}"
-    
+    # Альтернативно можно просто отправить ссылку как текст
     return subscription_url
 
 
@@ -364,9 +340,10 @@ def get_instructions_menu(uuid_key=None, user_id=None):
     kb = InlineKeyboardMarkup(row_width=2)
     
     if uuid_key:
-        # Кнопки для приложений
+        # Кнопки для приложений (без пользовательских протоколов)
         kb.add(
             InlineKeyboardButton(f"📱 HAPP+", callback_data=f"app_happ_{uuid_key}"),
+            InlineKeyboardButton(f"🌐 Hiddify", callback_data=f"app_hiddify_{uuid_key}")
         )
         kb.add(
             InlineKeyboardButton(f"🔗 Подписка", callback_data=f"sub_{uuid_key}"),
@@ -375,6 +352,28 @@ def get_instructions_menu(uuid_key=None, user_id=None):
     
     kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад в Мои ключи", callback_data="my_keys"))
     kb.add(InlineKeyboardButton(f"{EMOJI['home']} В главное меню", callback_data="main"))
+    
+    return kb
+
+def get_apps_menu(uuid_key):
+    """Меню приложений с безопасными ссылками"""
+    kb = InlineKeyboardMarkup(row_width=1)
+    
+    vless_link = generate_vless_link(uuid_key)
+    
+    # Для HAPP+ и Hiddify используем текст, а не URL
+    kb.add(InlineKeyboardButton(
+        "📱 Открыть в HAPP+", 
+        callback_data=f"app_happ_{uuid_key}"
+    ))
+    kb.add(InlineKeyboardButton(
+        "📋 Копировать ссылку", 
+        callback_data=f"copy_{uuid_key}"
+    ))
+    kb.add(InlineKeyboardButton(
+        "🔗 Получить подписку", 
+        callback_data=f"sub_{uuid_key}"
+    ))
     
     return kb
 
@@ -629,27 +628,75 @@ def query_handler(call):
         if app_type == "happ":
             link = app_links["happ"]
             app_name = "HAPP+"
-            instructions = "1. Установите HAPP+\n2. Нажмите кнопку ниже\n3. Разрешите открыть ссылку"
+            instructions = (
+                "1. Установите HAPP+ из Play Market/App Store\n"
+                "2. Скопируйте ссылку ниже\n"
+                "3. Откройте HAPP+ → Нажмите «+»\n"
+                "4. Выберите «Импорт из буфера обмена»\n"
+                "5. Подключитесь!"
+            )
         elif app_type == "hiddify":
-            link = app_links["hiddify"]
+            link = app_links["vless"]  # Используем обычную ссылку
             app_name = "Hiddify"
-            instructions = "1. Установите Hiddify\n2. Нажмите кнопку ниже\n3. Разрешите открыть ссылку"
+            instructions = (
+                "1. Установите Hiddify\n"
+                "2. Скопируйте ссылку ниже\n"
+                "3. Откройте Hiddify → Нажмите «+»\n"
+                "4. Вставьте ссылку и нажмите «Импорт»\n"
+                "5. Подключитесь!"
+            )
         else:
             return
         
         text = (
-            f"📱 *Открыть в {app_name}*\n\n"
+            f"📱 *Настройка {app_name}*\n\n"
             f"{instructions}\n\n"
-            f"Или скопируйте ссылку:\n"
-            f"`{link}`"
+            f"*Ваша ссылка для подключения:*\n"
+            f"```\n{link}\n```\n\n"
+            f"Нажмите на кнопку ниже, чтобы скопировать ссылку, затем откройте {app_name}."
         )
         
         kb = InlineKeyboardMarkup()
-        kb.add(InlineKeyboardButton(f"🚀 Открыть в {app_name}", url=link))
+        # Изменяем: вместо URL кнопки делаем callback для копирования
+        kb.add(InlineKeyboardButton(
+            f"📋 Скопировать для {app_name}", 
+            callback_data=f"copy_app_{app_type}_{u_uuid}"
+        ))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data=f"show_key_{u_uuid}"))
         
         bot.send_message(uid, text, reply_markup=kb, parse_mode="Markdown")
-        bot.answer_callback_query(call.id, f"Открываю в {app_name}...")
+        bot.answer_callback_query(call.id, f"Откройте {app_name} и вставьте ссылку")
+
+    elif call.data.startswith("copy_app_"):
+        # Копирование ссылки для приложения
+        parts = call.data.split("_")
+        app_type = parts[2]
+        u_uuid = parts[3]
+        
+        app_links = generate_app_links(u_uuid)
+        
+        if app_type == "happ":
+            link = app_links["happ"]
+            app_name = "HAPP+"
+        elif app_type == "hiddify":
+            link = app_links["vless"]  # Используем vless ссылку
+            app_name = "Hiddify"
+        else:
+            link = app_links["vless"]
+            app_name = "приложения"
+        
+        # Отправляем ссылку как отдельное сообщение
+        bot.send_message(uid, 
+            f"📋 *Ссылка для {app_name}:*\n\n"
+            f"```\n{link}\n```\n\n"
+            f"1. Нажмите и удерживайте эту ссылку\n"
+            f"2. Выберите «Копировать»\n"
+            f"3. Откройте {app_name}\n"
+            f"4. Вставьте ссылку в приложении",
+            parse_mode="Markdown"
+        )
+        
+        bot.answer_callback_query(call.id, "✅ Ссылка отправлена в чат!")
 
     elif call.data.startswith("sub_"):
         # Обработка кнопки подписки
