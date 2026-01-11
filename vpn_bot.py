@@ -193,7 +193,7 @@ def give_referral_reward(referrer_id, referred_id):
             email = f"ref_{referrer_id}_{int(time.time())}"
             
             if add_user_to_xray(u_uuid, email, REFERRAL_REWARD_DAYS):
-                db.add_key(referrer_id, u_uuid, SID, REFERRAL_REWARD_DAYS, email)
+                db.add_key(referrer_id, u_uuid, SID, REFERRAL_REWARD_DAYS)
                 db.add_referral_reward(referrer_id, referred_id, REFERRAL_REWARD_DAYS)
                 
                 # Отправляем уведомление рефереру
@@ -295,7 +295,7 @@ def start_handler(message):
         email = f"trial_{user_id}_{int(time.time())}"
         
         if add_user_to_xray(u_uuid, email, 3):
-            db.add_key(user_id, u_uuid, SID, 3, email)
+            db.add_key(user_id, u_uuid, SID, 3)
             text = (
                 f"{EMOJI['crown']} *Добро пожаловать в MAGAMIX VPN* {EMOJI['fire']}\n\n"
                 f"{EMOJI['star']} *Вам выдан БЕСПЛАТНЫЙ пробный период на 3 дня!*\n"
@@ -585,7 +585,7 @@ def query_handler(call):
         email = f"user_{target_id}_{int(time.time())}"
         
         if add_user_to_xray(u_uuid, email, days):
-            db.add_key(target_id, u_uuid, SID, days, email)
+            db.add_key(target_id, u_uuid, SID, days)
             link = generate_vless_link(u_uuid)
             
             success_text = (
