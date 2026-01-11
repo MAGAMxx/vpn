@@ -1,14 +1,19 @@
 BOT_TOKEN = "8570392401:AAFfowtqYzjxz-PCC-0IVJPx1xl5V03LCXk"
 ADMIN_ID = 8479289622
 
+# Данные сервера
 SERVER_IP = "31.130.131.214"
 SERVER_PORT = 443
 PBK = "Fc5uuBATtxZ5wNmz0YxFfHZEN2H25Cqudse7PPW_wR0"
 FP = "chrome"
 SNI = "www.microsoft.com"
 
-XRAY_API_URL = "http://127.0.0.1:62789"  # Локальный API Xray
-XRAY_API_TOKEN = ""  # если требуется
+# Настройки 3X-UI
+PANEL_URL = "https://31.130.131.214:55694"
+PANEL_PATH = "xqAY0T10JV0Nut7YIp"
+PANEL_USER = "admin"  # ЗАМЕНИТЕ НА ВАШ
+PANEL_PASS = "admin"  # ЗАМЕНИТЕ НА ВАШ
+INBOUND_ID = 1 # ID вашего Reality инбаунда в панели
 
 PAY_PHONE = "79283376737"
 PAY_BANK = "Озон"
