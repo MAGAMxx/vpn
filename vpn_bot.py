@@ -621,20 +621,20 @@ def query_handler(call):
         bot.edit_message_text(text, uid, call.message.id, 
                              reply_markup=kb, parse_mode="Markdown")
     
-    elif call.data.startswith("show_key_"):  # ← ЭТО ДОЛЖНО БЫТЬ НА УРОВНЕ С ДРУГИМИ ELIF
+   elif call.data.startswith("show_key_"):
         u_uuid = call.data.replace("show_key_", "")
-        db.cursor.execute("SELECT end_date, email FROM keys WHERE uuid=? AND user_id=?", (u_uuid, uid))
+        db.cursor.execute("SELECT end_date FROM keys WHERE uuid=? AND user_id=?", (u_uuid, uid))
         row = db.cursor.fetchone()
         if not row:
             bot.answer_callback_query(call.id, "Ключ не найден")
             return
 
-        end_date_str, email = row
+        end_date_str = row[0]  # Измените здесь
         end_date = datetime.datetime.fromisoformat(end_date_str)
         remaining = get_remaining_time_str(end_date)
         
-        # Получаем статистику трафика
-        up_gb, down_gb, total_gb = get_client_traffic_stats(email)
+        # Без email - создаем фиктивный
+        email = f"user_{uid}_{u_uuid[:8]}"
         
         # Генерируем ссылку для HAPP+ с красивым профилем
         link = generate_happ_plus_link(uid)
