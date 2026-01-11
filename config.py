@@ -13,7 +13,7 @@ SERVER_IP = "31.130.131.214"
 SERVER_PORT = 443
 PBK = "Fc5uuBATtxZ5wNmz0YxFfHZEN2H25Cqudse7PPW_wR0"
 FP = "chrome"
-SNI = "www.microsoft.com"
+SNI = "www.microsoft.com,microsoft.com"
 
 # --- Xray API ---
 XRAY_API_URL = "http://127.0.0.1:62789"  # локальный API
