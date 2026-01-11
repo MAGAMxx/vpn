@@ -1,96 +1,150 @@
-import uuid
-import datetime
-import sqlite3
-import json
-import subprocess
-from aiogram import Bot, Dispatcher, types
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.utils import executor
+import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+import uuid, random, requests
+from datetime import datetime
 from config import *
+from db import create_user, get_user_by_ref, add_key, extend_key, get_active_key
 
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(bot)
-
-# база
-conn = sqlite3.connect("users.db")
-cursor = conn.cursor()
-cursor.execute("""CREATE TABLE IF NOT EXISTS users(
-    tg_id INTEGER,
-    username TEXT,
-    uuid TEXT,
-    short_id TEXT,
-    plan TEXT,
-    expiry DATE
-)""")
-conn.commit()
-
-# временные заказы
+bot = telebot.TeleBot(BOT_TOKEN)
 user_orders = {}
 
-# /start
-@dp.message_handler(commands=["start"])
-async def start(msg: types.Message):
+# ===== VLESS link =====
+def generate_vless_link(uuid_val, short_id, tg_id):
+    return f"vless://{uuid_val}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality&pbk={PBK}&fp={FP}&sni={SNI}&sid={short_id}&spx=%2F#MAGAMIX-{tg_id}"
+
+# ===== Xray API =====
+def create_xray_user(uuid_val, short_id, days):
+    url = f"{XRAY_API_URL}/vless-user"
+    data = {
+        "uuid": uuid_val,
+        "short_id": short_id,
+        "expiry_days": days
+    }
+    headers = {"Authorization": f"Bearer {XRAY_API_TOKEN}"}
+    r = requests.post(url, json=data, headers=headers)
+    return r.ok
+
+# ===== MAIN MENU =====
+def main_menu():
     kb = InlineKeyboardMarkup()
     kb.add(InlineKeyboardButton("💳 Купить VPN", callback_data="buy"))
-    await msg.answer("Добро пожаловать в MAGAMIX VPN", reply_markup=kb)
+    kb.add(InlineKeyboardButton("🔑 Мои ключи", callback_data="keys"))
+    kb.add(InlineKeyboardButton("🛠 Техподдержка", url="https://t.me/nejnayatp3"))
+    return kb
 
-# выбрать тариф
-@dp.callback_query_handler(lambda c: c.data == "buy")
-async def choose_plan(call: types.CallbackQuery):
-    kb = InlineKeyboardMarkup()
-    for k, v in PRICES.items():
-        kb.add(InlineKeyboardButton(f"{v['name']} — {v['price']}₽", callback_data=f"plan_{k}"))
-    kb.add(InlineKeyboardButton("🔙 Назад", callback_data="back"))
-    await call.message.edit_text("Выберите тариф:", reply_markup=kb)
+# ===== START =====
+@bot.message_handler(commands=['start'])
+def start(message):
+    args = message.text.split()
+    referred_by = args[1] if len(args) > 1 else None
+    create_user(message.from_user.id, referred_by)
+    bot.send_message(message.chat.id, f"🔥 Привет {message.from_user.first_name}! Добро пожаловать в MAGAMIX VPN 🔥", reply_markup=main_menu())
 
-# показать оплату
-@dp.callback_query_handler(lambda c: c.data.startswith("plan_"))
-async def payment_info(call: types.CallbackQuery):
-    plan = call.data.replace("plan_", "")
-    user_orders[call.from_user.id] = plan
-    data = PRICES[plan]
+# ===== CALLBACKS =====
+@bot.callback_query_handler(func=lambda call: True)
+def callbacks(call):
+    tg_id = call.from_user.id
 
-    text = (
-        f"💳 Оплата\n\n"
-        f"📞 {PAY_PHONE}\n"
-        f"🏦 {PAY_BANK}\n"
-        f"💰 Сумма: {data['price']} ₽"
-    )
-
-    kb = InlineKeyboardMarkup()
-    kb.add(InlineKeyboardButton("✅ Оплатил", callback_data="paid"))
-    kb.add(InlineKeyboardButton("🔙 Назад", callback_data="buy"))
-
-    await call.message.edit_text(text, reply_markup=kb)
-
-# ждать чек
-@dp.callback_query_handler(lambda c: c.data == "paid")
-async def wait_check(call: types.CallbackQuery):
-    await call.message.answer("📸 Пришлите чек перевода (фото или документ)")
-
-# получение чека
-@dp.message_handler(content_types=["photo", "document"])
-async def get_check(msg: types.Message):
-    if msg.from_user.id not in user_orders:
+    if call.data == "keys":
+        key = get_active_key(tg_id)
+        if key:
+            link = generate_vless_link(key[0], key[1], tg_id)
+            bot.send_message(tg_id, f"🔑 Ваш ключ:\n{link}\n💳 План: {key[2]}\n⏳ До: {key[3]}")
+        else:
+            kb = InlineKeyboardMarkup()
+            kb.add(InlineKeyboardButton("💳 Купить VPN", callback_data="buy"))
+            bot.send_message(tg_id, "У вас нет ключей. Купите новый:", reply_markup=kb)
         return
 
-    plan = user_orders[msg.from_user.id]
-    data = PRICES[plan]
+    elif call.data == "buy":
+        kb = InlineKeyboardMarkup()
+        for k,v in PRICES.items():
+            kb.add(InlineKeyboardButton(f"{v['name']} — {v['price']}₽", callback_data=f"plan_{k}"))
+        kb.add(InlineKeyboardButton("⬅ Назад", callback_data="back"))
+        bot.edit_message_text("📦 Выберите тариф:", call.message.chat.id, call.message.message_id, reply_markup=kb)
+
+    elif call.data.startswith("plan_"):
+        plan = call.data.split("_")[1]
+        user_orders[tg_id] = plan
+        price = PRICES[plan]["price"]
+
+        kb = InlineKeyboardMarkup()
+        kb.add(InlineKeyboardButton("✅ Я оплатил", callback_data="paid"))
+        kb.add(InlineKeyboardButton("⬅ Назад", callback_data="buy"))
+
+        bot.edit_message_text(
+            f"💳 Оплата\n\n📞 {PAY_PHONE}\n🏦 {PAY_BANK}\n💰 {price} ₽\n\nПосле оплаты нажмите «Я оплатил»",
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=kb
+        )
+
+    elif call.data == "paid":
+        bot.send_message(tg_id, "📸 Отправьте чек перевода (фото или документ)")
+
+    elif call.data == "back":
+        bot.edit_message_text("Главное меню:", tg_id, call.message.message_id, reply_markup=main_menu())
+
+# ===== CHECK HANDLER =====
+@bot.message_handler(content_types=['photo','document'])
+def check_handler(message):
+    uid = message.from_user.id
+    if uid not in user_orders:
+        bot.reply_to(message, "❌ У вас нет активного заказа")
+        return
+
+    plan = user_orders[uid]
+    price = PRICES[plan]["price"]
 
     kb = InlineKeyboardMarkup()
     kb.add(
-        InlineKeyboardButton("✅ Выдать", callback_data=f"approve_{msg.from_user.id}"),
-        InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_{msg.from_user.id}")
+        InlineKeyboardButton("✅ Выдать", callback_data=f"give_{uid}"),
+        InlineKeyboardButton("❌ Отклонить", callback_data=f"deny_{uid}")
     )
 
     caption = (
-        f"🧾 Оплата\n\n"
-        f"👤 @{msg.from_user.username}\n"
-        f"📦 {data['name']}\n"
-        f"💰 {data['price']} ₽\n"
-        f"🕒 {datetime.datetime.now()}"
+        f"🧾 Оплата VPN\n\n"
+        f"👤 ID: {uid}\n"
+        f"📦 {PRICES[plan]['name']}\n"
+        f"💰 {price} ₽"
     )
 
-    await bot.send_message(ADMIN_ID, caption, reply_markup=kb)
-    await msg.forward(ADMIN_ID)
-    await msg.answer("⏳ Чек отправлен на проверку")
+    bot.forward_message(ADMIN_ID, message.chat.id, message.message_id)
+    bot.send_message(ADMIN_ID, caption, reply_markup=kb)
+    bot.reply_to(message, "⏳ Чек отправлен на проверку")
+
+# ===== ADMIN =====
+@bot.callback_query_handler(func=lambda call: call.data.startswith(("give_","deny_")))
+def admin(call):
+    if call.from_user.id != ADMIN_ID:
+        return
+
+    action, uid = call.data.split("_")
+    uid = int(uid)
+
+    if action == "give":
+        plan = user_orders.get(uid)
+        uuid_val = str(uuid.uuid4())
+        short_id = random.choice(["8b","87c72e","a55e4a67","082b0cc04005"])
+        days = PRICES[plan]["days"]
+
+        # создаём пользователя на панели
+        if create_xray_user(uuid_val, short_id, days):
+            add_key(uid, uuid_val, short_id, plan, days)
+            link = generate_vless_link(uuid_val, short_id, uid)
+            bot.send_message(uid, f"✅ VPN активирован!\n\n{link}")
+            bot.send_message(ADMIN_ID, f"✅ Выдано пользователю {uid}")
+        else:
+            bot.send_message(ADMIN_ID, f"❌ Ошибка при создании на панели для {uid}")
+
+        user_orders.pop(uid, None)
+    else:
+        bot.send_message(uid, "❌ Оплата отклонена. Свяжитесь с поддержкой.")
+        bot.send_message(ADMIN_ID, f"❌ Отклонено {uid}")
+        user_orders.pop(uid, None)
+
+    bot.answer_callback_query(call.id)
+
+# ===== RUN =====
+print("🔥 MAGAMIX VPN BOT RUNNING")
+bot.infinity_polling()
