@@ -13,7 +13,7 @@ PANEL_URL = "https://31.130.131.214:55694"
 PANEL_PATH = "xqAY0T10JV0Nut7YIp"
 PANEL_USER = "magam"  # Введите ваш логин от панели
 PANEL_PASS = "maga2192242"  # Введите ваш пароль от панели
-INBOUND_ID = 2  # ID вашего Reality-подключения в списке Inbounds
+INBOUND_ID = 4  # ID вашего Reality-подключения в списке Inbounds
 # Реквизиты
 PAY_PHONE = "79283376737"
 PAY_BANK = "Озон"
