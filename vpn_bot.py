@@ -4,7 +4,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import uuid, random
 from datetime import datetime, timedelta
 import requests
-from db import add_key, get_active_keys, extend_key, cleanup_expired_keys
+from db import add_key, get_active_keys, extend_key, cleanup_expired_keys, add_referral, check_referral
 from config import BOT_TOKEN, ADMIN_ID, PAY_PHONE, PAY_BANK, PRICES, SERVER_IP, SERVER_PORT, PBK, FP, SNI, XRAY_API_URL, XRAY_API_TOKEN
 
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -22,12 +22,11 @@ def main_menu():
     kb.add(InlineKeyboardButton("🔑 Мои ключи", callback_data="mykeys"))
     return kb
 
-# Создание клиента через API Xray
 def create_vless_link(telegram_id, plan_days):
     user_uuid = str(uuid.uuid4())
     sid = random.choice(SHORT_IDS)
 
-    # Реальный POST запрос к Xray API
+    # POST запрос к Xray API для создания клиента
     payload = {
         "add": [
             {
@@ -37,7 +36,7 @@ def create_vless_link(telegram_id, plan_days):
                 "alterId": 0,
                 "security": "reality",
                 "shortIds": [sid],
-                "expiry": plan_days  # дни
+                "expiry": plan_days
             }
         ]
     }
@@ -54,7 +53,6 @@ def create_vless_link(telegram_id, plan_days):
     add_key(telegram_id, user_uuid, sid, "manual", plan_days)
     return f"vless://{user_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality&pbk={PBK}&fp={FP}&sni={SNI}&sid={sid}&spx=%2F#MAGAMIX-{telegram_id}"
 
-# Удаление клиента с Xray через API
 def delete_xray_user(user_uuid):
     try:
         url = f"{XRAY_API_URL}/v1/clients/{user_uuid}"
@@ -66,12 +64,11 @@ def delete_xray_user(user_uuid):
     except Exception as e:
         print(f"[ERROR] Исключение при удалении клиента Xray: {e}")
 
-# Очистка просроченных ключей
 def cleanup_expired_keys_full():
-    now = datetime.utcnow().isoformat()
     import sqlite3
     conn = sqlite3.connect("vpn.db")
     cursor = conn.cursor()
+    now = datetime.utcnow().isoformat()
     cursor.execute("SELECT id, uuid FROM keys WHERE end_date<?", (now,))
     rows = cursor.fetchall()
     for key_id, uuid_key in rows:
@@ -85,7 +82,7 @@ def cleanup_expired_keys_full():
 @bot.message_handler(commands=['start'])
 def start_handler(message):
     bot.send_message(message.chat.id,
-        "🔥 Добро пожаловать в MAGAMIX VPN! 🔥\n\nЗащищай свои данные и пользуйся интернетом без ограничений.\n\nВыбери тариф и начни прямо сейчас! 💻🛡",
+        "🔥 Добро пожаловать в MAGAMIX VPN! 🔥\n\nС нами вы получаете защиту данных и свободу интернета!\n\nВыбери тариф и начни прямо сейчас! 💻🛡",
         reply_markup=main_menu())
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -142,6 +139,33 @@ def handle_check(message):
         bot.forward_message(ADMIN_ID, message.chat.id, message.message_id)
     bot.reply_to(message, "⏳ Чек отправлен на проверку")
     print(f"[INFO] Пользователь @{message.from_user.username} прислал чек для {data['name']}")
+
+# --- Рефералька ---
+@bot.message_handler(commands=['ref'])
+def ref_handler(message):
+    ref_code = f"REF-{message.from_user.id}"
+    bot.send_message(message.chat.id, f"Ваш реферальный код: {ref_code}\nПригласите друга, и ваш ключ продлится на 10 дней!")
+
+@bot.message_handler(commands=['invite'])
+def invite_handler(message):
+    parts = message.text.split()
+    if len(parts) != 2:
+        bot.reply_to(message, "Используйте: /invite <ref_code>")
+        return
+    ref_code = parts[1]
+    ref_user_id = check_referral(ref_code)
+    if not ref_user_id:
+        bot.reply_to(message, "Неверный реферальный код.")
+        return
+    # Продление ключа на 10 дней
+    extended = extend_key(ref_user_id, 10)
+    if extended:
+        add_referral(ref_user_id, message.from_user.id)
+        bot.reply_to(message, f"✅ Ключ пользователя {ref_user_id} продлён на 10 дней за приглашение!")
+    else:
+        # Создаём новый ключ на 10 дней
+        create_vless_link(ref_user_id, 10)
+        bot.reply_to(message, "✅ Новый ключ создан на 10 дней за приглашение!")
 
 # --- Автоочистка ключей каждые 10 минут ---
 import threading, time
