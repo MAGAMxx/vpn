@@ -610,24 +610,15 @@ def query_handler(call):
         if call.data.startswith("copy_ref_"):
             user_id = int(call.data.replace("copy_ref_", ""))
             ref_link = generate_referral_link(user_id)
-        # Копируем в буфер обмена
-            import pyperclip
-            pyperclip.copy(ref_link)
             bot.answer_callback_query(call.id, 
-                f"✅ Реферальная ссылка скопирована в буфер обмена!\n\n{ref_link}", 
+                f"✅ Реферальная ссылка скопирована!\n\n{ref_link}", 
                 show_alert=True
             )
-    else: 
-        u_uuid = call.data.replace("copy_", "")
-        link = generate_vless_link(u_uuid)
-        # Копируем в буфер обмена
-        import pyperclip
-        pyperclip.copy(link)
-        bot.answer_callback_query(call.id, 
-            "✅ Ключ скопирован в буфер обмена! Вставьте в приложение", 
-            show_alert=True
-        )
-
+        else: 
+            u_uuid = call.data.replace("copy_", "")
+            link = generate_vless_link(u_uuid)
+            bot.answer_callback_query(call.id, "✅ Ключ скопирован! Вставьте в приложение", show_alert=True)
+    
     elif call.data.startswith("app_"):
         # Обработка кнопок приложений
         app_type = call.data.split("_")[1]  # happ или hiddify
