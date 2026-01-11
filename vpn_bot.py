@@ -41,7 +41,7 @@ def add_user_to_xray(user_uuid, email, days):
                 "id": user_uuid,
                 "alterId": 0,
                 "email": email,
-                "limitIp": 0,  # Без лимита
+                "limitIp": 2,  # Без лимита
                 "totalGB": 0,
                 "expiryTime": expiry_time,
                 "enable": True,
@@ -103,7 +103,7 @@ def start_handler(message):
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(InlineKeyboardButton("💳 Купить VPN", callback_data="buy"),
            InlineKeyboardButton("🔑 Мои ключи", callback_data="my_keys"))
-    kb.add(InlineKeyboardButton("🆘 Поддержка", url="t.me/your_support"))  # Замени на реальный
+    kb.add(InlineKeyboardButton("🆘 Поддержка", url="t.me/nejnayatp3"))  # Замени на реальный
     
     bot.send_message(user_id, "Вы в главном меню MAGAMIX VPN. Выберите действие:", reply_markup=kb)
 
