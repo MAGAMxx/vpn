@@ -8,7 +8,7 @@ import json
 import time
 import threading
 import random
-import pytz  # для московского времени
+import pytz
 import db
 from config import *
 
@@ -16,7 +16,7 @@ requests.packages.urllib3.disable_warnings()
 bot = telebot.TeleBot(BOT_TOKEN)
 session = requests.Session()
 
-# Московский часовой пояс (UTC+3)
+# Московский часовой пояс
 MOSCOW_TZ = pytz.timezone('Europe/Moscow')
 
 # --- Взаимодействие с 3X-UI ---
@@ -90,10 +90,12 @@ def generate_vless_link(u_uuid):
             f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#MAGAMIX_VPN")
 
 def get_remaining_time_str(end_date):
-    # end_date приходит как naive (без tz), приводим к МСК
-    end_date_msk = end_date.replace(tzinfo=MOSCOW_TZ)
-    now_msk = datetime.datetime.now(MOSCOW_TZ)
-    delta = end_date_msk - now_msk
+    # end_date из базы — naive datetime (без tz)
+    # now — aware (с tz)
+    # Приводим end_date к тому же tz
+    end_date_aware = MOSCOW_TZ.localize(end_date)
+    now_aware = datetime.datetime.now(MOSCOW_TZ)
+    delta = end_date_aware - now_aware
     if delta.total_seconds() <= 0:
         return "истёк"
     if delta.days >= 1:
@@ -175,9 +177,11 @@ def query_handler(call):
 
         for row in keys:
             u_uuid = row[1]
-            end_date = row[4]  # уже datetime из db.py
+            end_date = row[4]  # naive из базы
 
-            delta = end_date - now
+            # Приводим end_date к aware
+            end_date_aware = MOSCOW_TZ.localize(end_date)
+            delta = end_date_aware - now
             if delta.total_seconds() <= 0:
                 continue
 
@@ -211,7 +215,7 @@ def query_handler(call):
 
         text = (f"🔐 Ключ\n"
                 f"Осталось: **{remaining}**\n"
-                f"До: {end_date.astimezone(MOSCOW_TZ).strftime('%d.%m.%Y %H:%M')} МСК\n\n"
+                f"До: {end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y %H:%M')} МСК\n\n"
                 f"`{link}`\n\n"
                 "Скопируй ссылку выше и вставь в приложение Happ Plus / Hiddify ↓")
         bot.edit_message_text(text, uid, call.message.id, parse_mode="Markdown", reply_markup=kb)
@@ -282,5 +286,5 @@ def auto_delete_loop():
 threading.Thread(target=auto_delete_loop, daemon=True).start()
 
 if __name__ == "__main__":
-    print(f"[{datetime.datetime.now(MOSCOW_TZ).strftime('%Y-%m-%d %H:%M:%S')}] Бот запущен...")
+    print(f"[{datetime.datetime.now(MOSCOW_TZ).strftime('%Y-%m-%d %H:%M:%S %Z')}] Бот запущен...")
     bot.infinity_polling()
