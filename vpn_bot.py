@@ -154,7 +154,7 @@ def delete_user_from_xray(email):
 def generate_vless_link(uuid_str):
     """Базовая генерация VLESS ссылки"""
     return (f"vless://{uuid_str}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality"
-            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F"
+            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F&flow=xtls-rprx-vision"
             f"#MAGAMIX%20VPN%20{EMOJI['fire']}")
 
 def generate_beautiful_vless_link(user_id):
@@ -164,7 +164,7 @@ def generate_beautiful_vless_link(user_id):
         return None
     
     uuid_str = active_key[1]
-    email = active_key[6]  # email из базы
+    email = active_key[6]
     
     # Получаем статистику трафика
     up_gb, down_gb, total_gb = get_client_traffic_stats(email)
@@ -199,30 +199,29 @@ def generate_beautiful_vless_link(user_id):
     else:
         traffic_used = "0 GB"
     
-    # Создаем красивый заголовок с эмодзи
-    if remaining_days > 30:
-        status_emoji = "🟢"
-    elif remaining_days > 7:
-        status_emoji = "🟡"
-    elif remaining_days > 0:
-        status_emoji = "🟠"
-    else:
-        status_emoji = "🔴"
+    # Создаем красивый заголовок как в примере
+    # Формат: Молния ВПН | Дата | Статус | Трафик | Истекает
+    current_date = datetime.datetime.now(MOSCOW_TZ).strftime('%d.%m.%Y %H:%M')
     
-    # Формируем заголовок для HAPP+
+    # Вычисляем оставшиеся дни до истечения
+    expiry_date_str = end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y')
+    
+    # Создаем профиль как в примере
     profile_name = (
-        f"{EMOJI['crown']} MAGAMIX VPN {status_emoji}\n"
-        f"⏳ {remaining_time} | 📊 {traffic_used}\n"
-        f"⚡ MAX SPEED | 🛡️ SECURE"
+        f"🔥 MAGAMIX VPN\n"
+        f"{current_date} | 🇳🇱 Нидерланды\n\n"
+        f"{traffic_used} / ∞ GB\n"
+        f"Истекает: {expiry_date_str}\n\n"
+        f"+{REFERRAL_REWARD_DAYS} дней за друга! @{bot.get_me().username}"
     )
     
     # Кодируем для URL
     import urllib.parse
     encoded_name = urllib.parse.quote(profile_name)
     
-    return (f"vless://{uuid_str}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality"
-            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F"
-            f"&flow=xtls-rprx-vision"
+    return (f"vless://{uuid_str}@{SERVER_IP}:{SERVER_PORT}?"
+            f"type=tcp&encryption=none&security=reality"
+            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F&flow=xtls-rprx-vision"
             f"#{encoded_name}")
 
 def get_remaining_time_str(end_date):
@@ -578,15 +577,15 @@ def query_handler(call):
         # Получаем статистику трафика
         up_gb, down_gb, total_gb = get_client_traffic_stats(email)
         
-        remaining = get_remaining_time_str(end_date)
-        
         # Генерируем красивую ссылку
         beautiful_link = generate_beautiful_vless_link(uid)
         if not beautiful_link:
             beautiful_link = generate_vless_link(u_uuid)
         
-        # Форматируем трафик для отображения
-        traffic_display = ""
+        # Форматируем информацию для отображения
+        expiry_date = end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y')
+        
+        # Показываем как будет выглядеть профиль
         if total_gb is not None:
             if total_gb < 1:
                 traffic_display = f"{total_gb*1024:.1f} MB"
@@ -597,19 +596,22 @@ def query_handler(call):
         else:
             traffic_display = "0 GB"
         
-        end_date_formatted = end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M') + ' МСК'
+        current_time = datetime.datetime.now(MOSCOW_TZ).strftime('%d.%m.%Y %H:%M')
+        
+        profile_preview = (
+            f"🔥 MAGAMIX VPN\n"
+            f"{current_time} | 🇳🇱 Нидерланды\n\n"
+            f"{traffic_display} / ∞ GB\n"
+            f"Истекает: {expiry_date}\n\n"
+            f"+{REFERRAL_REWARD_DAYS} дней за друга! @{bot.get_me().username}"
+        )
 
         text = (
-            f"{EMOJI['key']} *Ключ с красивым профилем*\n\n"
-            f"{EMOJI['crown']} *В HAPP+ будет отображаться:*\n"
+            f"{EMOJI['key']} *Ваш ключ с красивым профилем*\n\n"
+            f"{EMOJI['info']} *В HAPP+ будет отображаться:*\n"
             f"────────────────\n"
-            f"⏳ *Осталось:* {remaining}\n"
-            f"📊 *Трафик:* {traffic_display}\n"
-            f"📅 *До:* {end_date_formatted}\n"
-            f"⚡ *Скорость:* Максимальная\n"
-            f"🛡️ *Защита:* Включена\n"
-            f"────────────────\n"
-            f"{EMOJI['fire']} *MAGAMIX VPN PRO*\n\n"
+            f"`{profile_preview}`\n"
+            f"────────────────\n\n"
             f"{EMOJI['link']} *Ссылка подключения:*\n"
             f"`{beautiful_link}`\n\n"
             f"{EMOJI['info']} *Инструкция:*\n"
@@ -639,11 +641,16 @@ def query_handler(call):
                 show_alert=True
             )
         else:
-            u_uuid = call.data.replace("copy_", "")
             beautiful_link = generate_beautiful_vless_link(uid)
             if not beautiful_link:
+                u_uuid = call.data.replace("copy_", "")
                 beautiful_link = generate_vless_link(u_uuid)
-            bot.answer_callback_query(call.id, "✅ Ключ скопирован! Вставьте в приложение", show_alert=True)
+            
+            # Показываем полную ссылку в алерте
+            bot.answer_callback_query(call.id, 
+                f"✅ Ключ скопирован!\n\n{beautiful_link[:100]}...", 
+                show_alert=True
+            )
     
     elif call.data == "referral":
         ref_link = generate_referral_link(uid)
@@ -821,6 +828,11 @@ def auto_delete_loop():
 threading.Thread(target=auto_delete_loop, daemon=True).start()
 
 if __name__ == "__main__":
+    # Тестовая ссылка
+    test_uuid = str(uuid.uuid4())
+    test_link = f"vless://{test_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F&flow=xtls-rprx-vision#Test"
+    print(f"{EMOJI['rocket']} Тестовая ссылка: {test_link[:100]}...")
+    
     print(f"{EMOJI['rocket']} Бот запущен!")
     print(f"{EMOJI['fire']} MAGAMIX VPN готов к работе!")
     bot.infinity_polling()
