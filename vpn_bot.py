@@ -167,37 +167,122 @@ def generate_vless_link(u_uuid):
     return (f"vless://{u_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality"
             f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#🔥НИДЕРЛАНДЫ 🇳🇱")
 
-def generate_pro_vless_link(user_id):
-    """Для клиентов, поддерживающих расширенные параметры"""
+def generate_happ_plus_link(user_id):
+    """Специально для HAPP+ с кастомным интерфейсом"""
     active_key = db.get_active_key(user_id)
     if not active_key:
         return None
     
     uuid_str = active_key[1]
+    email = active_key[6]
     
-    # Некоторые клиенты читают дополнительные параметры
-    import urllib.parse
+    # Получаем статистику
+    up_gb, down_gb, total_gb = get_client_traffic_stats(email)
+    end_date = active_key[4]
     
-    # Параметры для кастомного интерфейса
-    params = {
-        "security": "reality",
-        "encryption": "none", 
-        "type": "tcp",
-        "sni": SNI,
-        "fp": FP,
-        "pbk": PBK,
-        "sid": SID,
-        "flow": "xtls-rprx-vision",
-        "remark": "🔥 MAGAMIX VPN | Premium",
-        "icon": "https://img.icons8.com/color/96/000000/diamond.png",
-        "theme": "dark",
-        "group": "MAGAMIX Servers"
+    # Форматируем данные
+    expiry_date = end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y')
+    current_date = datetime.datetime.now(MOSCOW_TZ).strftime('%d.%m.%Y %H:%M')
+    
+    # Форматируем трафик
+    if total_gb is not None:
+        if total_gb < 1:
+            traffic_used = f"{total_gb*1024:.1f} MB"
+        elif total_gb < 1024:
+            traffic_used = f"{total_gb:.1f} GB"
+        else:
+            traffic_used = f"{total_gb/1024:.1f} TB"
+    else:
+        traffic_used = "0 GB"
+    
+    # Создаем кастомный интерфейс для HAPP+
+    subscription_info = {
+        "version": 2,
+        "title": "🔥 MAGAMIX VPN",
+        "subtitle": "Premium Netherlands Server",
+        "icon": "https://img.icons8.com/color/96/000000/vpn.png",
+        "header": {
+            "title": "MAGAMIX VPN",
+            "subtitle": "🇳🇱 Netherlands | Premium",
+            "icon": "https://img.icons8.com/color/96/000000/netherlands.png"
+        },
+        "servers": [{
+            "name": "🇳🇱 Netherlands | Premium",
+            "type": "vless",
+            "address": SERVER_IP,
+            "port": SERVER_PORT,
+            "id": uuid_str,
+            "security": "reality",
+            "flow": "xtls-rprx-vision",
+            "sni": SNI,
+            "fingerprint": FP,
+            "publicKey": PBK,
+            "shortId": SID,
+            "status": "🟢 Online",
+            "ping": "25ms",
+            "load": "15%"
+        }],
+        "user": {
+            "id": str(user_id),
+            "expiry": expiry_date,
+            "remaining": get_remaining_time_str(end_date),
+            "traffic": {
+                "used": traffic_used,
+                "total": "∞ GB",
+                "percentage": 0
+            }
+        },
+        "referral": {
+            "enabled": True,
+            "code": f"ref{user_id}",
+            "reward": f"+{REFERRAL_REWARD_DAYS} дней",
+            "message": f"Пригласи друга и получи +{REFERRAL_REWARD_DAYS} дней!"
+        },
+        "ui": {
+            "theme": "dark",
+            "primaryColor": "#FF6B35",
+            "backgroundColor": "#0F172A",
+            "cardColor": "#1E293B",
+            "textColor": "#F8FAFC",
+            "showStats": True,
+            "showTrafficChart": True,
+            "compactMode": False
+        },
+        "meta": {
+            "provider": "MAGAMIX VPN",
+            "website": "https://t.me/" + str(bot.get_me().username),
+            "support": "@nejnayatp3",
+            "version": "1.0"
+        }
     }
     
-    # Собираем параметры в строку
-    params_str = "&".join([f"{k}={urllib.parse.quote(str(v))}" for k, v in params.items()])
+    # Конвертируем в base64
+    subscription_json = json.dumps(subscription_info, ensure_ascii=False, indent=2)
+    subscription_base64 = base64.b64encode(subscription_json.encode()).decode()
     
-    return f"vless://{uuid_str}@{SERVER_IP}:{SERVER_PORT}?{params_str}#🔥 MAGAMIX VPN"
+    # Генерируем ссылку
+    base_link = (f"vless://{uuid_str}@{SERVER_IP}:{SERVER_PORT}?"
+                 f"security=reality&encryption=none&type=tcp&"
+                 f"sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&"
+                 f"flow=xtls-rprx-vision")
+    
+    # Добавляем subscriptionUserInfo если поддерживается
+    if len(subscription_base64) + len(base_link) < 2000:  # Telegram limit
+        link = f"{base_link}&subscriptionUserInfo={subscription_base64}#🔥 MAGAMIX VPN"
+    else:
+        # Если слишком длинная, используем простую версию
+        link = f"{base_link}#🔥 MAGAMIX VPN | 🇳🇱 | {expiry_date}"
+    
+    return link
+
+def generate_vless_link(uuid_str):
+    """Базовая генерация VLESS ссылки (на всякий случай)"""
+    return (f"vless://{uuid_str}@{SERVER_IP}:{SERVER_PORT}?"
+            f"security=reality&encryption=none&type=tcp&"
+            f"sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&"
+            f"flow=xtls-rprx-vision"
+            f"#🔥 MAGAMIX VPN")
+
 
 def get_remaining_time_str(end_date):
     end_date_aware = MOSCOW_TZ.localize(end_date)
@@ -535,40 +620,61 @@ def query_handler(call):
         bot.edit_message_text(text, uid, call.message.id, 
                              reply_markup=kb, parse_mode="Markdown")
     
-    elif call.data.startswith("show_key_"):
+        elif call.data.startswith("show_key_"):
         u_uuid = call.data.replace("show_key_", "")
-        db.cursor.execute("SELECT end_date FROM keys WHERE uuid=? AND user_id=?", (u_uuid, uid))
+        db.cursor.execute("SELECT end_date, email FROM keys WHERE uuid=? AND user_id=?", (u_uuid, uid))
         row = db.cursor.fetchone()
         if not row:
             bot.answer_callback_query(call.id, "Ключ не найден")
             return
 
-        end_date_str = str(row[0])
+        end_date_str, email = row
         end_date = datetime.datetime.fromisoformat(end_date_str)
         remaining = get_remaining_time_str(end_date)
-        link = generate_vless_link(u_uuid)
         
-        # Форматируем дату окончания
+        # Получаем статистику трафика
+        up_gb, down_gb, total_gb = get_client_traffic_stats(email)
+        
+        # Генерируем ссылку для HAPP+ с красивым профилем
+        link = generate_happ_plus_link(uid)
+        if not link:
+            link = generate_vless_link(u_uuid)
+        
+        # Форматируем данные для отображения
         end_date_formatted = end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M') + ' МСК'
+        
+        # Показываем статистику трафика
+        traffic_info = ""
+        if total_gb is not None:
+            if total_gb < 1:
+                traffic_info = f"{total_gb*1024:.1f} MB"
+            elif total_gb < 1024:
+                traffic_info = f"{total_gb:.1f} GB"
+            else:
+                traffic_info = f"{total_gb/1024:.1f} TB"
+        else:
+            traffic_info = "0 GB"
 
         text = (
             f"{EMOJI['key']} *Детали ключа*\n\n"
             f"{EMOJI['time']} *Осталось:* **{remaining}**\n"
+            f"{EMOJI['traffic']} *Использовано:* **{traffic_info}**\n"
             f"*Действует до:* {end_date_formatted}\n\n"
             f"{EMOJI['link']} *Ссылка подключения:*\n"
             f"`{link}`\n\n"
             f"{EMOJI['info']} *Инструкция по настройке:*\n"
-            f"1. Скачайте приложение *Happ Plus* или *Hiddify*\n"
+            f"1. Скачайте приложение *Happ Plus* \n"
             f"2. Нажмите «+» → «Импорт из буфера обмена»\n"
             f"3. Скопируйте ссылку выше и вставьте в приложение\n"
-            f"4. Активируйте подключение и наслаждайтесь! {EMOJI['rocket']}"
+            f"4. В HAPP+ вы увидите красивый интерфейс с иконкой!\n"
+            f"5. Активируйте подключение и наслаждайтесь! {EMOJI['rocket']}"
         )
         
         bot.edit_message_text(text, uid, call.message.id, 
                              reply_markup=get_instructions_menu(u_uuid), 
                              parse_mode="Markdown")
     
-    elif call.data.startswith("copy_"):
+    elif call.data.startswith("copy_"): 
         if call.data.startswith("copy_ref_"):
             user_id = int(call.data.replace("copy_ref_", ""))
             ref_link = generate_referral_link(user_id)
