@@ -2,6 +2,7 @@
 import sqlite3
 import datetime
 
+# Подключаемся к базе (check_same_thread=False для работы в многопоточной среде)
 conn = sqlite3.connect('vpn_bot.db', check_same_thread=False)
 cursor = conn.cursor()
 
@@ -24,7 +25,6 @@ CREATE TABLE IF NOT EXISTS keys (
     start_date TEXT,
     end_date TEXT,
     is_active INTEGER DEFAULT 1,
-    email TEXT,
     FOREIGN KEY (user_id) REFERENCES users(id)
 )
 ''')
@@ -70,6 +70,7 @@ def add_user(uid, username, referrer_id=None):
         VALUES (?, ?, ?)
     """, (uid, username, referrer_id))
     
+    # Если пользователь новый и есть реферер, добавляем запись в referrals
     if cursor.rowcount > 0 and referrer_id:
         cursor.execute("""
             INSERT OR IGNORE INTO referrals (referrer_id, referred_id) 
@@ -79,7 +80,7 @@ def add_user(uid, username, referrer_id=None):
     conn.commit()
     return cursor.rowcount > 0
 
-def add_key(user_id, u_uuid, sid, days, email):
+def add_key(user_id, u_uuid, sid, days):
     """Добавляем ключ с датами в формате ISO строки"""
     start_date = datetime.datetime.now().isoformat()
     end_date = (datetime.datetime.now() + datetime.timedelta(days=days)).isoformat()
@@ -91,9 +92,9 @@ def add_key(user_id, u_uuid, sid, days, email):
     """, (user_id,))
     
     cursor.execute("""
-        INSERT INTO keys (user_id, uuid, sid, start_date, end_date, is_active, email)
-        VALUES (?, ?, ?, ?, ?, 1, ?)
-    """, (user_id, u_uuid, sid, start_date, end_date, email))
+        INSERT INTO keys (user_id, uuid, sid, start_date, end_date, is_active)
+        VALUES (?, ?, ?, ?, ?, 1)
+    """, (user_id, u_uuid, sid, start_date, end_date))
     
     conn.commit()
     return cursor.lastrowid
@@ -179,6 +180,13 @@ def extend_key_days(user_id, days_to_add):
         print(f"Ошибка при продлении ключа: {e}")
         return False
 
+def create_key_if_none(user_id, u_uuid, sid, days):
+    """Создает новый ключ, если у пользователя нет активного"""
+    active_key = get_active_key(user_id)
+    if not active_key:
+        return add_key(user_id, u_uuid, sid, days)
+    return False  # Ключ уже есть
+
 def add_referral_reward(referrer_id, referred_id, days_added):
     """Добавляет запись о награде за реферала"""
     cursor.execute("""
@@ -194,6 +202,14 @@ def add_referral_reward(referrer_id, referred_id, days_added):
     """, (referrer_id, referred_id))
     
     conn.commit()
+
+def get_referrals_count(user_id):
+    """Получает количество рефералов пользователя"""
+    cursor.execute("""
+        SELECT COUNT(*) FROM referrals 
+        WHERE referrer_id = ? AND reward_given = 1
+    """, (user_id,))
+    return cursor.fetchone()[0]
 
 def get_referrals_stats(user_id):
     """Получает статистику по рефералам"""
@@ -211,8 +227,54 @@ def get_referrals_stats(user_id):
         'rewarded': row[1] if row and row[1] else 0
     }
 
+def get_user_info(user_id):
+    """Получает информацию о пользователе"""
+    cursor.execute("""
+        SELECT id, username, referrer_id, registration_date 
+        FROM users WHERE id = ?
+    """, (user_id,))
+    
+    row = cursor.fetchone()
+    if not row:
+        return None
+    
+    # Получаем статистику рефералов
+    ref_stats = get_referrals_stats(user_id)
+    
+    # Получаем активный ключ
+    active_key = get_active_key(user_id)
+    
+    return {
+        'id': row[0],
+        'username': row[1],
+        'referrer_id': row[2],
+        'registration_date': row[3],
+        'referrals_total': ref_stats['total'],
+        'referrals_rewarded': ref_stats['rewarded'],
+        'has_active_key': active_key is not None
+    }
+
+# Остальные функции остаются без изменений...
+def get_keys_with_expiry(user_id):
+    """Для старого метода — uuid + end_date как datetime"""
+    cursor.execute("""
+        SELECT uuid, end_date FROM keys 
+        WHERE user_id = ? 
+        AND end_date > DATETIME('now')
+    """, (user_id,))
+    
+    rows = cursor.fetchall()
+    result = []
+    for uuid_val, end_date_str in rows:
+        try:
+            end_date = datetime.datetime.fromisoformat(end_date_str)
+            result.append((uuid_val, end_date))
+        except ValueError:
+            print(f"Ошибка даты для uuid {uuid_val}")
+    return result
+
 def get_all_expired_keys():
-    cursor.execute("SELECT user_id, uuid, email FROM keys WHERE end_date < DATETIME('now')")
+    cursor.execute("SELECT user_id, uuid FROM keys WHERE end_date < DATETIME('now')")
     return cursor.fetchall()
 
 def delete_key_by_uuid(u_uuid):
