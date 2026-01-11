@@ -1,160 +1,182 @@
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-from config import *
-import db
-import threading
-import requests
-import uuid
 import datetime
+import uuid
+import requests
+import json
+import time
+import threading
+import db
+from config import *
+
+# Отключаем предупреждения об отсутствии SSL сертификата (так как у вас IP)
+requests.packages.urllib3.disable_warnings()
 
 bot = telebot.TeleBot(BOT_TOKEN)
+session = requests.Session()
 
-# ==================== КЛЮЧИ =====================
-def create_vless_link(telegram_id, days=30):
-    u = str(uuid.uuid4())
-    sid = uuid.uuid4().hex[:8]
+# --- Взаимодействие с 3X-UI через API ---
+
+def xui_login():
+    """Авторизация в панели для получения сессии"""
+    try:
+        login_url = f"{PANEL_URL}/{PANEL_PATH}/login"
+        r = session.post(login_url, data={"username": PANEL_USER, "password": PANEL_PASS}, verify=False, timeout=10)
+        return r.status_code == 200
+    except Exception as e:
+        print(f"Ошибка входа в панель: {e}")
+        return False
+
+def add_user_to_xray(user_uuid, email, days):
+    """Реальное добавление пользователя в конфиг Xray на сервере"""
+    if not xui_login(): return False
+    
+    # Время истечения в миллисекундах
+    expiry_time = int((time.time() + (days * 86400)) * 1000)
+    
     payload = {
-        "tag": "api",
-        "uuid": u,
-        "short_id": sid,
-        "expiry": days
+        "id": INBOUND_ID,
+        "settings": json.dumps({
+            "clients": [{
+                "id": user_uuid,
+                "alterId": 0,
+                "email": email,
+                "limitIp": 2,
+                "totalGB": 0,
+                "expiryTime": expiry_time,
+                "enable": True,
+                "tgId": "",
+                "subId": ""
+            }]
+        })
     }
     try:
-        requests.post(f"{XRAY_API_URL}/clients", json=payload)
-    except Exception as e:
-        print("Xray API Error:", e)
-    db.add_key(telegram_id, u, sid, days)
-    link = f"vless://{u}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality&pbk={PBK}&fp={FP}&sni={SNI}&sid={sid}&spx=%2F#MAGAMIX-{telegram_id}"
-    return link
+        r = session.post(f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/addClient", json=payload, verify=False)
+        return r.json().get("success", False)
+    except:
+        return False
 
-# Автоудаление просроченных ключей каждые 10 минут
-def cleanup_expired_keys():
-    while True:
-        db.delete_expired_keys()
-        threading.Event().wait(600)
+def delete_user_from_xray(email):
+    """Удаление пользователя из Xray по email (используется для просроченных)"""
+    if not xui_login(): return False
+    try:
+        r = session.post(f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/delClient/{INBOUND_ID}/{email}", verify=False)
+        return r.json().get("success", False)
+    except:
+        return False
 
-threading.Thread(target=cleanup_expired_keys, daemon=True).start()
+# --- Вспомогательные функции ---
 
-# ==================== МЕНЮ =====================
-def main_menu(user_id=None):
-    kb = InlineKeyboardMarkup()
-    kb.add(InlineKeyboardButton("💳 Купить VPN", callback_data="buy"))
-    kb.add(InlineKeyboardButton("🔑 Мои ключи", callback_data="my_keys"))
-    kb.add(InlineKeyboardButton("🛠 Техподдержка", url="https://t.me/nejnayatp3"))
-    keys = db.get_keys(user_id) if user_id else []
-    if not keys:
-        kb.add(InlineKeyboardButton("🎁 Получить 3 дня", callback_data="free3"))
-    return kb
+def generate_vless_link(u_uuid):
+    """Генерация ссылки формата VLESS Reality для Happ Plus"""
+    return (f"vless://{u_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality"
+            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#MAGAMIX_VPN")
 
-# ==================== СТАРТ =====================
+# --- Обработка команд бота ---
+
 @bot.message_handler(commands=['start'])
-def start(message):
-    ref = None
-    if message.text.startswith("/start ref-"):
-        try:
-            ref = int(message.text.split("-")[1])
-        except:
-            ref = None
-
-    # Добавляем пользователя
-    db.add_user(message.from_user.id, message.from_user.username, referrer_id=ref)
+def start_handler(message):
+    user_id = message.from_user.id
+    db.add_user(user_id, message.from_user.username)
     
-    # Продление реферального ключа
-    if ref:
-        db.extend_key(ref, 10)
-        bot.send_message(ref, f"🎉 Пользователь @{message.from_user.username} присоединился по вашей ссылке! Ваш ключ продлен на 10 дней.")
+    # Проверка на первый вход (бесплатный период 3 дня)
+    user_keys = db.get_keys(user_id)
+    if not user_keys:
+        u_uuid = str(uuid.uuid4())
+        email = f"trial_{user_id}"
+        if add_user_to_xray(u_uuid, email, 3):
+            db.add_key(user_id, u_uuid, "sid", 3)
+            link = generate_vless_link(u_uuid)
+            bot.send_message(user_id, f"🎁 Привет! Тебе выдан пробный период на 3 дня!\n\nКлюч для Happ Plus:\n`{link}`", parse_mode="Markdown")
+    
+    kb = InlineKeyboardMarkup(row_width=2)
+    kb.add(InlineKeyboardButton("💳 Купить VPN", callback_data="buy"), 
+           InlineKeyboardButton("🔑 Мои ключи", callback_data="my_keys"))
+    kb.add(InlineKeyboardButton("🆘 Поддержка", url="t.me"))
+    
+    bot.send_message(user_id, "Вы в главном меню MAGAMIX VPN. Выберите действие:", reply_markup=kb)
 
-    # Главное меню
-    bot.send_message(message.chat.id,
-                     f"🔥 Привет, {message.from_user.username}! Добро пожаловать в MAGAMIX VPN! 🔥\n"
-                     "Защищай свои данные и пользуйся интернетом без ограничений!",
-                     reply_markup=main_menu(message.from_user.id))
-
-# ==================== КНОПКИ =====================
 @bot.callback_query_handler(func=lambda call: True)
-def callback_handler(call):
-    user_id = call.from_user.id
-    keys = user_keys.get(user_id, [])
-
-    # Меню покупки
+def query_handler(call):
+    uid = call.from_user.id
+    
     if call.data == "buy":
         kb = InlineKeyboardMarkup()
         for k, v in PRICES.items():
             kb.add(InlineKeyboardButton(f"{v['name']} — {v['price']}₽", callback_data=f"plan_{k}"))
-        kb.add(InlineKeyboardButton("🔙 Назад", callback_data="back"))
-        bot.edit_message_text("Выберите тариф:", chat_id=user_id, message_id=call.message.message_id, reply_markup=kb)
+        bot.edit_message_text("Выберите тарифный план:", uid, call.message.id, reply_markup=kb)
 
     elif call.data.startswith("plan_"):
-        plan = call.data.replace("plan_", "")
-        db.add_payment(user_id, plan)
-        kb = InlineKeyboardMarkup()
-        kb.add(InlineKeyboardButton("✅ Оплатил", callback_data=f"paid_{plan}"))
-        kb.add(InlineKeyboardButton("🔙 Назад", callback_data="buy"))
-        bot.edit_message_text(f"💳 Оплата\n\n📞 {PAY_PHONE}\n🏦 {PAY_BANK}\n💰 {PRICES[plan]['price']} ₽", chat_id=user_id, message_id=call.message.message_id, reply_markup=kb)
-
-    elif call.data.startswith("paid_"):
-        plan = call.data.replace("paid_", "")
-        bot.send_message(user_id, "📸 Пришлите чек перевода (фото или документ)")
-        bot.send_message(ADMIN_ID, f"💰 Новый платеж: @{call.from_user.username} — {PRICES[plan]['name']} — {PRICES[plan]['price']}₽")
-        kb_admin = InlineKeyboardMarkup()
-        kb_admin.add(InlineKeyboardButton("✅ Выдать", callback_data=f"admin_issue_{user_id}_{plan}"))
-        kb_admin.add(InlineKeyboardButton("❌ Отклонить", callback_data=f"admin_decline_{user_id}_{plan}"))
-        bot.send_message(ADMIN_ID, "Проверка платежа:", reply_markup=kb_admin)
-
-    elif call.data == "back":
-        bot.edit_message_text("Главное меню:", chat_id=user_id, message_id=call.message.message_id, reply_markup=main_menu(user_id))
+        plan_key = call.data.replace("plan_", "")
+        data = PRICES[plan_key]
+        db.add_payment(uid, plan_key) # Запись в БД
+        
+        text = (f"💳 *Оплата тарифа: {data['name']}*\n\n"
+                f"Сумма к оплате: *{data['price']}₽*\n"
+                f"Банк: {PAY_BANK}\n"
+                f"Номер телефона: `{PAY_PHONE}`\n\n"
+                "⚠️ Пришлите ФОТО или СКРИНШОТ чека после перевода.")
+        bot.edit_message_text(text, uid, call.message.id, parse_mode="Markdown")
 
     elif call.data == "my_keys":
-        keys = db.get_keys(user_id)
+        keys = db.get_keys(uid)
         if not keys:
-        kb = InlineKeyboardMarkup()
-        kb.add(InlineKeyboardButton("💳 Купить ключ", callback_data="buy"))
-        bot.edit_message_text(
-            "❌ У вас пока нет активных ключей.", 
-            chat_id=call.message.chat.id,
-            message_id=call.message.message_id,
-            reply_markup=kb
-        )
-    else:
-        # Выводим все ключи пользователя
-        text = "🔑 Ваши ключи:\n\n"
-        for k in keys:
-            text += f"• {k['link']} (действует до {k['expiry']})\n"
-        bot.edit_message_text(
-            text, 
-            chat_id=call.message.chat.id,
-            message_id=call.message.message_id
-        )
+            bot.answer_callback_query(call.id, "У вас пока нет активных ключей.")
+        else:
+            msg = "🔑 *Ваши активные ключи:*\n\n"
+            for k in keys:
+                # k в данном случае кортеж (id, uuid, sid, start, end)
+                link = generate_vless_link(k[1])
+                msg += f"📅 Действует до: {k[4][:10]}\n`{link}`\n\n"
+            bot.send_message(uid, msg, parse_mode="Markdown")
 
-    elif call.data == "free3":
-        create_vless_link(user_id, days=3)
-        bot.send_message(user_id, "🎁 Ваш бесплатный ключ на 3 дня создан!", reply_markup=main_menu(user_id))
+    elif call.data.startswith("adm_ok_"):
+        # Логика подтверждения администратором
+        target_id = int(call.data.split("_")[2])
+        u_uuid = str(uuid.uuid4())
+        days = 30 # Здесь можно извлечь из последней записи payments в БД
+        
+        email = f"user_{target_id}"
+        if add_user_to_xray(u_uuid, email, days):
+            db.add_key(target_id, u_uuid, "sid", days)
+            link = generate_vless_link(u_uuid)
+            bot.send_message(target_id, f"✅ Оплата подтверждена! Ваш ключ на {days} дней:\n\n`{link}`", parse_mode="Markdown")
+            bot.edit_message_text(f"Выдано пользователю {target_id}", ADMIN_ID, call.message.id)
+        else:
+            bot.send_message(ADMIN_ID, "❌ Ошибка при связи с API 3X-UI")
 
-    # Админ: выдача/отклонение
-    elif call.data.startswith("admin_issue_"):
-        parts = call.data.split("_")
-        target_id = int(parts[2])
-        plan = parts[3]
-        create_vless_link(target_id, PRICES[plan]['days'])
-        db.set_payment_status(target_id, plan, "issued")
-        bot.send_message(target_id, f"✅ Ваш ключ {PRICES[plan]['name']} активирован!")
-        bot.send_message(ADMIN_ID, f"Ключ выдан @{target_id}")
+# --- Прием чеков ---
 
-    elif call.data.startswith("admin_decline_"):
-        parts = call.data.split("_")
-        target_id = int(parts[2])
-        plan = parts[3]
-        db.set_payment_status(target_id, plan, "declined")
-        bot.send_message(target_id, f"❌ Ваш платеж {PRICES[plan]['name']} отклонен")
-        bot.send_message(ADMIN_ID, f"Платеж отклонен @{target_id}")
+@bot.message_handler(content_types=['photo'])
+def handle_receipt(message):
+    uid = message.from_user.id
+    bot.send_message(uid, "⏳ Чек получен и отправлен на проверку. Ожидайте подтверждения.")
+    
+    # Пересылка админу
+    bot.forward_message(ADMIN_ID, message.chat.id, message.id)
+    kb = InlineKeyboardMarkup()
+    kb.add(InlineKeyboardButton("✅ Подтвердить и выдать ключ", callback_data=f"adm_ok_{uid}"))
+    bot.send_message(ADMIN_ID, f"🔔 Новый чек от @{message.from_user.username} (ID: {uid})", reply_markup=kb)
 
-# ==================== ЧЕК =====================
-@bot.message_handler(content_types=['photo', 'document'])
-def handle_check(message):
-    bot.send_message(ADMIN_ID, f"📸 Новый чек от @{message.from_user.username}")
-    bot.forward_message(ADMIN_ID, message.chat.id, message.message_id)
-    bot.send_message(message.from_user.id, "⏳ Чек отправлен на проверку")
+# --- Фоновый процесс удаления по времени ---
 
-# ==================== ЗАПУСК =====================
-print("[INFO] Бот запущен и ждёт сообщений...")
-bot.infinity_polling()
+def auto_delete_loop():
+    while True:
+        try:
+            expired = db.get_all_expired_keys()
+            for row in expired:
+                user_id, u_uuid = row[0], row[1]
+                # Сначала пробуем триал, потом обычный email
+                if delete_user_from_xray(f"trial_{user_id}") or delete_user_from_xray(f"user_{user_id}"):
+                    db.delete_key_by_uuid(u_uuid)
+                    try: bot.send_message(user_id, "🔴 Срок вашей подписки истек. VPN отключен.")
+                    except: pass
+        except Exception as e:
+            print(f"Ошибка в цикле очистки: {e}")
+        time.sleep(3600) # Проверка каждый час
+
+threading.Thread(target=auto_delete_loop, daemon=True).start()
+
+if __name__ == "__main__":
+    print(f"[{datetime.datetime.now()}] Бот MAGAMIX запущен...")
+    bot.infinity_polling()
