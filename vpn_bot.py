@@ -74,6 +74,7 @@ def start(message):
 @bot.callback_query_handler(func=lambda call: True)
 def callback_handler(call):
     user_id = call.from_user.id
+    keys = user_keys.get(user_id, [])
 
     # Меню покупки
     if call.data == "buy":
@@ -106,12 +107,24 @@ def callback_handler(call):
     elif call.data == "my_keys":
         keys = db.get_keys(user_id)
         if not keys:
-            bot.send_message(user_id, "У вас нет активных ключей.", reply_markup=main_menu(user_id))
-        else:
-            text = "🔑 Ваши ключи:\n\n"
-            for k in keys:
-                text += create_vless_link(user_id, days=(k[4]-k[3]).days) + "\n"
-            bot.send_message(user_id, text)
+        kb = InlineKeyboardMarkup()
+        kb.add(InlineKeyboardButton("💳 Купить ключ", callback_data="buy"))
+        bot.edit_message_text(
+            "❌ У вас пока нет активных ключей.", 
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            reply_markup=kb
+        )
+    else:
+        # Выводим все ключи пользователя
+        text = "🔑 Ваши ключи:\n\n"
+        for k in keys:
+            text += f"• {k['link']} (действует до {k['expiry']})\n"
+        bot.edit_message_text(
+            text, 
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id
+        )
 
     elif call.data == "free3":
         create_vless_link(user_id, days=3)
