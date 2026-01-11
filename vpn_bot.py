@@ -11,12 +11,10 @@ from config import *
 
 # Отключаем предупреждения об отсутствии SSL сертификата (так как у вас IP)
 requests.packages.urllib3.disable_warnings()
-
 bot = telebot.TeleBot(BOT_TOKEN)
 session = requests.Session()
 
 # --- Взаимодействие с 3X-UI через API ---
-
 def xui_login():
     """Авторизация в панели для получения сессии"""
     try:
@@ -41,7 +39,7 @@ def add_user_to_xray(user_uuid, email, days):
                 "id": user_uuid,
                 "alterId": 0,
                 "email": email,
-                "limitIp": 2,
+                "limitIp": 0,  # Убрал лимит IP, если нужно - верните 2
                 "totalGB": 0,
                 "expiryTime": expiry_time,
                 "enable": True,
@@ -53,27 +51,27 @@ def add_user_to_xray(user_uuid, email, days):
     try:
         r = session.post(f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/addClient", json=payload, verify=False)
         return r.json().get("success", False)
-    except:
+    except Exception as e:
+        print(f"Ошибка добавления клиента: {e}")
         return False
 
 def delete_user_from_xray(email):
     """Удаление пользователя из Xray по email (используется для просроченных)"""
     if not xui_login(): return False
     try:
-        r = session.post(f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/delClient/{INBOUND_ID}/{email}", verify=False)
+        r = session.post(f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/{INBOUND_ID}/delClient/{email}", verify=False)
         return r.json().get("success", False)
-    except:
+    except Exception as e:
+        print(f"Ошибка удаления клиента: {e}")
         return False
 
 # --- Вспомогательные функции ---
-
 def generate_vless_link(u_uuid):
-    """Генерация ссылки формата VLESS Reality для Happ Plus"""
+    """Генерация ссылки формата VLESS Reality для Hiddify (Happ Plus)"""
     return (f"vless://{u_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality"
             f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#MAGAMIX_VPN")
 
 # --- Обработка команд бота ---
-
 @bot.message_handler(commands=['start'])
 def start_handler(message):
     user_id = message.from_user.id
@@ -85,14 +83,14 @@ def start_handler(message):
         u_uuid = str(uuid.uuid4())
         email = f"trial_{user_id}"
         if add_user_to_xray(u_uuid, email, 3):
-            db.add_key(user_id, u_uuid, "sid", 3)
+            db.add_key(user_id, u_uuid, SID, 3)
             link = generate_vless_link(u_uuid)
-            bot.send_message(user_id, f"🎁 Привет! Тебе выдан пробный период на 3 дня!\n\nКлюч для Happ Plus:\n`{link}`", parse_mode="Markdown")
+            bot.send_message(user_id, f"🎁 Привет! Тебе выдан пробный период на 3 дня!\n\nКлюч для Hiddify (Happ Plus):\n`{link}`", parse_mode="Markdown")
     
     kb = InlineKeyboardMarkup(row_width=2)
-    kb.add(InlineKeyboardButton("💳 Купить VPN", callback_data="buy"), 
+    kb.add(InlineKeyboardButton("💳 Купить VPN", callback_data="buy"),
            InlineKeyboardButton("🔑 Мои ключи", callback_data="my_keys"))
-    kb.add(InlineKeyboardButton("🆘 Поддержка", url="t.me"))
+    kb.add(InlineKeyboardButton("🆘 Поддержка", url="t.me/your_support_link"))  # Замените на реальный URL поддержки
     
     bot.send_message(user_id, "Вы в главном меню MAGAMIX VPN. Выберите действие:", reply_markup=kb)
 
@@ -105,11 +103,10 @@ def query_handler(call):
         for k, v in PRICES.items():
             kb.add(InlineKeyboardButton(f"{v['name']} — {v['price']}₽", callback_data=f"plan_{k}"))
         bot.edit_message_text("Выберите тарифный план:", uid, call.message.id, reply_markup=kb)
-
     elif call.data.startswith("plan_"):
         plan_key = call.data.replace("plan_", "")
         data = PRICES[plan_key]
-        db.add_payment(uid, plan_key) # Запись в БД
+        db.add_payment(uid, plan_key)  # Запись в БД
         
         text = (f"💳 *Оплата тарифа: {data['name']}*\n\n"
                 f"Сумма к оплате: *{data['price']}₽*\n"
@@ -117,7 +114,6 @@ def query_handler(call):
                 f"Номер телефона: `{PAY_PHONE}`\n\n"
                 "⚠️ Пришлите ФОТО или СКРИНШОТ чека после перевода.")
         bot.edit_message_text(text, uid, call.message.id, parse_mode="Markdown")
-
     elif call.data == "my_keys":
         keys = db.get_keys(uid)
         if not keys:
@@ -125,20 +121,23 @@ def query_handler(call):
         else:
             msg = "🔑 *Ваши активные ключи:*\n\n"
             for k in keys:
-                # k в данном случае кортеж (id, uuid, sid, start, end)
+                # k = (id, uuid, sid, start_date, end_date)
                 link = generate_vless_link(k[1])
-                msg += f"📅 Действует до: {k[4][:10]}\n`{link}`\n\n"
+                end_date_str = k[4].strftime("%d.%m.%Y")
+                msg += f"📅 Действует до: {end_date_str}\n`{link}`\n\n"
             bot.send_message(uid, msg, parse_mode="Markdown")
-
     elif call.data.startswith("adm_ok_"):
         # Логика подтверждения администратором
         target_id = int(call.data.split("_")[2])
+        plan_key = db.get_last_pending_plan(target_id)
+        if not plan_key:
+            bot.send_message(ADMIN_ID, "❌ Нет ожидающих платежей для этого пользователя.")
+            return
+        days = PRICES[plan_key]['days']
         u_uuid = str(uuid.uuid4())
-        days = 30 # Здесь можно извлечь из последней записи payments в БД
-        
         email = f"user_{target_id}"
         if add_user_to_xray(u_uuid, email, days):
-            db.add_key(target_id, u_uuid, "sid", days)
+            db.add_key(target_id, u_uuid, SID, days)
             link = generate_vless_link(u_uuid)
             bot.send_message(target_id, f"✅ Оплата подтверждена! Ваш ключ на {days} дней:\n\n`{link}`", parse_mode="Markdown")
             bot.edit_message_text(f"Выдано пользователю {target_id}", ADMIN_ID, call.message.id)
@@ -146,7 +145,6 @@ def query_handler(call):
             bot.send_message(ADMIN_ID, "❌ Ошибка при связи с API 3X-UI")
 
 # --- Прием чеков ---
-
 @bot.message_handler(content_types=['photo'])
 def handle_receipt(message):
     uid = message.from_user.id
@@ -159,21 +157,29 @@ def handle_receipt(message):
     bot.send_message(ADMIN_ID, f"🔔 Новый чек от @{message.from_user.username} (ID: {uid})", reply_markup=kb)
 
 # --- Фоновый процесс удаления по времени ---
-
 def auto_delete_loop():
     while True:
         try:
             expired = db.get_all_expired_keys()
             for row in expired:
-                user_id, u_uuid = row[0], row[1]
+                user_id, u_uuid = row
                 # Сначала пробуем триал, потом обычный email
-                if delete_user_from_xray(f"trial_{user_id}") or delete_user_from_xray(f"user_{user_id}"):
+                trial_email = f"trial_{user_id}"
+                user_email = f"user_{user_id}"
+                deleted = False
+                if delete_user_from_xray(trial_email):
+                    deleted = True
+                if delete_user_from_xray(user_email):
+                    deleted = True
+                if deleted:
                     db.delete_key_by_uuid(u_uuid)
-                    try: bot.send_message(user_id, "🔴 Срок вашей подписки истек. VPN отключен.")
-                    except: pass
+                    try:
+                        bot.send_message(user_id, "🔴 Срок вашей подписки истек. VPN отключен.")
+                    except:
+                        pass
         except Exception as e:
             print(f"Ошибка в цикле очистки: {e}")
-        time.sleep(3600) # Проверка каждый час
+        time.sleep(3600)  # Проверка каждый час
 
 threading.Thread(target=auto_delete_loop, daemon=True).start()
 
