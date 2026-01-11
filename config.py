@@ -1,20 +1,22 @@
 BOT_TOKEN = "8570392401:AAFfowtqYzjxz-PCC-0IVJPx1xl5V03LCXk"
 ADMIN_ID = 8479289622
 
-# Данные сервера
+# Данные для генерации ссылки Reality (VLESS)
 SERVER_IP = "31.130.131.214"
 SERVER_PORT = 443
 PBK = "Fc5uuBATtxZ5wNmz0YxFfHZEN2H25Cqudse7PPW_wR0"
 FP = "chrome"
 SNI = "www.microsoft.com"
+SID = "shortid" # Если в панели настроен другой ShortID, замените
 
-# Настройки 3X-UI
+# Настройки доступа к 3X-UI
 PANEL_URL = "https://31.130.131.214:55694"
 PANEL_PATH = "xqAY0T10JV0Nut7YIp"
-PANEL_USER = "admin"  # ЗАМЕНИТЕ НА ВАШ
-PANEL_PASS = "admin"  # ЗАМЕНИТЕ НА ВАШ
-INBOUND_ID = 1 # ID вашего Reality инбаунда в панели
+PANEL_USER = "magam"  # Введите ваш логин от панели
+PANEL_PASS = "maga2192242"  # Введите ваш пароль от панели
+INBOUND_ID = 1        # ID вашего Reality-подключения в списке Inbounds
 
+# Реквизиты
 PAY_PHONE = "79283376737"
 PAY_BANK = "Озон"
 
