@@ -1,92 +1,63 @@
-# db.py
 import sqlite3
-from datetime import datetime, timedelta
+import datetime
 
-DB_FILE = "vpn.db"
+conn = sqlite3.connect("vpn.db", check_same_thread=False)
+cursor = conn.cursor()
 
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS keys (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            telegram_id INTEGER,
-            uuid TEXT,
-            sid TEXT,
-            plan TEXT,
-            start_date TEXT,
-            end_date TEXT
-        )
-    """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS referrals (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            referrer_id INTEGER,
-            referred_id INTEGER,
-            created_at TEXT
-        )
-    """)
+# Создание таблиц
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    telegram_id INTEGER PRIMARY KEY,
+    username TEXT,
+    referrer_id INTEGER,
+    first_joined TIMESTAMP
+)
+""")
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS keys (
+    telegram_id INTEGER,
+    uuid TEXT,
+    short_id TEXT,
+    start_date TIMESTAMP,
+    end_date TIMESTAMP
+)
+""")
+conn.commit()
+
+# Пользователь
+def add_user(telegram_id, username, referrer_id=None):
+    cursor.execute("INSERT OR IGNORE INTO users VALUES (?, ?, ?, ?)",
+                   (telegram_id, username, referrer_id, datetime.datetime.now()))
     conn.commit()
-    conn.close()
 
-init_db()
+def get_user(telegram_id):
+    cursor.execute("SELECT * FROM users WHERE telegram_id=?", (telegram_id,))
+    return cursor.fetchone()
 
-def add_key(telegram_id, uuid, sid, plan, days):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    start = datetime.utcnow()
-    end = start + timedelta(days=days)
-    c.execute("INSERT INTO keys (telegram_id, uuid, sid, plan, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?)",
-              (telegram_id, uuid, sid, plan, start.isoformat(), end.isoformat()))
+# Ключи
+def add_key(telegram_id, uuid, short_id, days):
+    start = datetime.datetime.now()
+    end = start + datetime.timedelta(days=days)
+    cursor.execute("INSERT INTO keys VALUES (?, ?, ?, ?, ?)",
+                   (telegram_id, uuid, short_id, start, end))
     conn.commit()
-    conn.close()
 
-def get_active_keys(telegram_id):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    now = datetime.utcnow().isoformat()
-    c.execute("SELECT * FROM keys WHERE telegram_id=? AND end_date>?", (telegram_id, now))
-    rows = c.fetchall()
-    conn.close()
-    return rows
+def get_keys(telegram_id):
+    cursor.execute("SELECT * FROM keys WHERE telegram_id=?", (telegram_id,))
+    return cursor.fetchall()
 
 def extend_key(telegram_id, days):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    now = datetime.utcnow().isoformat()
-    # Берем первый активный ключ
-    c.execute("SELECT id, end_date FROM keys WHERE telegram_id=? AND end_date>?", (telegram_id, now))
-    row = c.fetchone()
+    cursor.execute("SELECT end_date FROM keys WHERE telegram_id=? ORDER BY end_date DESC LIMIT 1", (telegram_id,))
+    row = cursor.fetchone()
     if row:
-        key_id, old_end = row
-        old_end_dt = datetime.fromisoformat(old_end)
-        new_end = old_end_dt + timedelta(days=days)
-        c.execute("UPDATE keys SET end_date=? WHERE id=?", (new_end.isoformat(), key_id))
+        end_date = datetime.datetime.fromisoformat(row[0])
+        new_end = end_date + datetime.timedelta(days=days)
+        cursor.execute("UPDATE keys SET end_date=? WHERE telegram_id=? AND end_date=?", (new_end, telegram_id, row[0]))
         conn.commit()
-        conn.close()
-        return True
-    conn.close()
-    return False
+    else:
+        return False
 
-def add_referral(referrer_id, referred_id):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("INSERT INTO referrals (referrer_id, referred_id, created_at) VALUES (?, ?, ?)",
-              (referrer_id, referred_id, datetime.utcnow().isoformat()))
+def delete_expired_keys():
+    now = datetime.datetime.now()
+    cursor.execute("DELETE FROM keys WHERE end_date<?", (now,))
     conn.commit()
-    conn.close()
-
-def check_referral(ref_code):
-    try:
-        telegram_id = int(ref_code.replace("REF-", ""))
-        return telegram_id
-    except:
-        return None
-
-def cleanup_expired_keys():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    now = datetime.utcnow().isoformat()
-    c.execute("DELETE FROM keys WHERE end_date<?", (now,))
-    conn.commit()
-    conn.close()
