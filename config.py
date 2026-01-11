@@ -7,7 +7,7 @@ SERVER_PORT = 443
 PBK = "Fc5uuBATtxZ5wNmz0YxFfHZEN2H25Cqudse7PPW_wR0"
 FP = "chrome"
 SNI = "www.microsoft.com"
-SID = "2f496c6c1877dc,726701,3633,87afceb4,70a9af1b692c,fd028c251f,0500267a86b6a502,8e"  # Если в панели настроен другой ShortID, замените
+SID = "8b,87c72e,a55e4a67,082b0cc04005,93281c7c7dcc2a81,15518f9d8686e6,c2f8,37de7da930"  # Если в панели настроен другой ShortID, замените
 # Настройки доступа к 3X-UI
 PANEL_URL = "https://31.130.131.214:55694"
 PANEL_PATH = "xqAY0T10JV0Nut7YIp"
