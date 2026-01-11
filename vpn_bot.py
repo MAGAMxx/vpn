@@ -487,7 +487,7 @@ def query_handler(call):
         text = (
             f"{EMOJI['key']} *Ваш активный ключ*\n\n"
             f"{EMOJI['time']} *Осталось:* **{remaining}**\n"
-            f"{EMOJI['calendar']} *Действует до:* {end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M')} МСК\n\n"
+            f" *Действует до:* {end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M')} МСК\n\n"
             f"{EMOJI['info']} *Что дальше?*"
         )
         
