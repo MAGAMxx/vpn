@@ -21,8 +21,12 @@ def create_xray_user(uuid_val, short_id, days):
         "expiry_days": days
     }
     headers = {"Authorization": f"Bearer {XRAY_API_TOKEN}"}
-    r = requests.post(url, json=data, headers=headers)
-    return r.ok
+    try:
+        r = requests.post(url, json=data, headers=headers, timeout=10)
+        return r.ok
+    except Exception as e:
+        print(f"[ERROR] Xray API: {e}")
+        return False
 
 # ===== MAIN MENU =====
 def main_menu():
@@ -38,7 +42,7 @@ def start(message):
     args = message.text.split()
     referred_by = args[1] if len(args) > 1 else None
     create_user(message.from_user.id, referred_by)
-    bot.send_message(message.chat.id, f"🔥 Привет {message.from_user.first_name}! Добро пожаловать в MAGAMIX VPN 🔥", reply_markup=main_menu())
+    bot.send_message(message.chat.id, f"🔥 Привет {message.from_user.first_name}! Добро пожаловать в MAGAMIX VPN 🔥\nЗащищай свои данные и пользуйся интернетом без ограничений!", reply_markup=main_menu())
 
 # ===== CALLBACKS =====
 @bot.callback_query_handler(func=lambda call: True)
