@@ -7,8 +7,6 @@ import json
 import time
 import threading
 import pytz
-import urllib.parse
-import base64
 import db
 from config import *
 
@@ -164,9 +162,9 @@ def delete_user_from_xray(email):
         return False
 
 # --- Вспомогательные функции ---
-#def generate_vless_link(u_uuid):
-#     return (f"vless://{u_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality"
-#             f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#⚡MAGAMIX_VPN | НИДЕРЛАНДЫ ")
+def generate_vless_link(u_uuid):
+    return (f"vless://{u_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality"
+            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#⚡MAGAMIX_VPN | НИДЕРЛАНДЫ ")
 
 def get_remaining_time_str(end_date):
     end_date_aware = MOSCOW_TZ.localize(end_date)
@@ -261,73 +259,6 @@ def give_referral_reward(referrer_id, referred_id):
         print(f"[REFERRAL REWARD ERROR] {e}")
         return False
 
-def generate_vless_link(u_uuid):
-    """Генерация VLESS ссылки"""
-    return (f"vless://{u_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality"
-            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F&flow=xtls-rprx-vision"
-            f"#⚡MAGAMIX_VPN | НИДЕРЛАНДЫ 🇳🇱")
-
-def generate_app_links(u_uuid):
-    """Генерация ссылок для открытия в приложениях"""
-    vless_link = generate_vless_link(u_uuid)
-    
-    # Кодируем для URL
-    import urllib.parse
-    encoded_link = urllib.parse.quote(vless_link)
-    
-    # Ссылки для разных приложений
-    return {
-        "vless": vless_link,
-        "happ": f"happ://import-config/{encoded_link}",
-        "hiddify": f"hiddify://import-subscription/{encoded_link}",
-        "v2rayng": f"v2rayng://import-conf/{encoded_link}",
-        "clash": f"clash://install-config?url={encoded_link}",
-        "universal": f"https://t.me/{bot.get_me().username}?start=link{encoded_link}"
-    }
-
-def generate_subscription_link(user_id):
-    """Генерация ссылки подписки (Subscription)"""
-    active_key = db.get_active_key(user_id)
-    if not active_key:
-        return None
-    
-    uuid_str = active_key[1]
-    
-    # Создаем подписку с одним сервером
-    import base64
-    import json
-    
-    config = {
-        "version": "2.0",
-        "servers": [{
-            "remarks": "🔥 MAGAMIX VPN | Нидерланды 🇳🇱",
-            "address": SERVER_IP,
-            "port": SERVER_PORT,
-            "id": uuid_str,
-            "flow": "xtls-rprx-vision",
-            "encryption": "none",
-            "network": "tcp",
-            "type": "none",
-            "host": SNI,
-            "path": "/",
-            "tls": "reality",
-            "sni": SNI,
-            "fp": FP,
-            "alpn": "",
-            "pbk": PBK,
-            "sid": SID
-        }]
-    }
-    
-    config_json = json.dumps(config, ensure_ascii=False)
-    encoded_config = base64.b64encode(config_json.encode()).decode()
-    
-    # Ссылка подписки
-    subscription_url = f"https://{SERVER_IP}/sub/{uuid_str}?config={encoded_config}"
-    
-    return subscription_url
-
-
 def get_main_menu():
     """Главное меню"""
     kb = InlineKeyboardMarkup(row_width=2)
@@ -359,23 +290,16 @@ def get_buy_menu():
     kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
     return kb
 
-def get_instructions_menu(uuid_key=None, user_id=None):
-    """Меню инструкций с кнопками для приложений"""
-    kb = InlineKeyboardMarkup(row_width=2)
-    
+def get_instructions_menu(uuid_key=None):
+    """Меню инструкций"""
+    kb = InlineKeyboardMarkup()
     if uuid_key:
-        # Кнопки для приложений
-        kb.add(
-            InlineKeyboardButton(f"📱 HAPP+", callback_data=f"app_happ_{uuid_key}"),
-        )
-        kb.add(
-            InlineKeyboardButton(f"🔗 Подписка", callback_data=f"sub_{uuid_key}"),
-            InlineKeyboardButton(f"{EMOJI['copy']} Ссылка", callback_data=f"copy_{uuid_key}")
-        )
-    
+        kb.add(InlineKeyboardButton(
+            f"{EMOJI['copy']} Скопировать ключ", 
+            callback_data=f"copy_{uuid_key}"
+        ))
     kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад в Мои ключи", callback_data="my_keys"))
     kb.add(InlineKeyboardButton(f"{EMOJI['home']} В главное меню", callback_data="main"))
-    
     return kb
 
 def get_referral_menu(user_id):
@@ -589,6 +513,7 @@ def query_handler(call):
         end_date_str = str(row[0])
         end_date = datetime.datetime.fromisoformat(end_date_str)
         remaining = get_remaining_time_str(end_date)
+        link = generate_vless_link(u_uuid)
         
         # Форматируем дату окончания
         end_date_formatted = end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M') + ' МСК'
@@ -597,14 +522,18 @@ def query_handler(call):
             f"{EMOJI['key']} *Детали ключа*\n\n"
             f"{EMOJI['time']} *Осталось:* **{remaining}**\n"
             f"*Действует до:* {end_date_formatted}\n\n"
-            f"{EMOJI['info']} *Выберите способ подключения:*"
+            f"{EMOJI['link']} *Ссылка подключения:*\n"
+            f"`{link}`\n\n"
+            f"{EMOJI['info']} *Инструкция по настройке:*\n"
+            f"1. Скачайте приложение *Happ Plus* или *Hiddify*\n"
+            f"2. Нажмите «+» → «Импорт из буфера обмена»\n"
+            f"3. Скопируйте ссылку выше и вставьте в приложение\n"
+            f"4. Активируйте подключение и наслаждайтесь! {EMOJI['rocket']}"
         )
         
-        # Используем обновленное меню с кнопками приложений
-        kb = get_instructions_menu(u_uuid, uid)
-        
         bot.edit_message_text(text, uid, call.message.id, 
-                             reply_markup=kb, parse_mode="Markdown")
+                             reply_markup=get_instructions_menu(u_uuid), 
+                             parse_mode="Markdown")
     
     elif call.data.startswith("copy_"):
         if call.data.startswith("copy_ref_"):
@@ -614,85 +543,10 @@ def query_handler(call):
                 f"✅ Реферальная ссылка скопирована!\n\n{ref_link}", 
                 show_alert=True
             )
-        else: 
+        else:
             u_uuid = call.data.replace("copy_", "")
             link = generate_vless_link(u_uuid)
             bot.answer_callback_query(call.id, "✅ Ключ скопирован! Вставьте в приложение", show_alert=True)
-
-    elif call.data.startswith("app_"):
-        # Обработка кнопок приложений
-        app_type = call.data.split("_")[1]  # happ или hiddify
-        u_uuid = call.data.split("_")[2]
-        
-        app_links = generate_app_links(u_uuid)
-        
-        if app_type == "happ":
-            link = app_links["happ"]
-            app_name = "HAPP+"
-            instructions = "1. Установите HAPP+\n2. Нажмите кнопку ниже\n3. Разрешите открыть ссылку"
-        elif app_type == "hiddify":
-            link = app_links["hiddify"]
-            app_name = "Hiddify"
-            instructions = "1. Установите Hiddify\n2. Нажмите кнопку ниже\n3. Разрешите открыть ссылку"
-        else:
-            return
-        
-        text = (
-            f"📱 *Открыть в {app_name}*\n\n"
-            f"{instructions}\n\n"
-            f"Или скопируйте ссылку:\n"
-            f"`{link}`"
-        )
-        
-        kb = InlineKeyboardMarkup()
-        kb.add(InlineKeyboardButton(f"🚀 Открыть в {app_name}", url=link))
-        kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data=f"show_key_{u_uuid}"))
-        
-        bot.send_message(uid, text, reply_markup=kb, parse_mode="Markdown")
-        bot.answer_callback_query(call.id, f"Открываю в {app_name}...")
-
-    elif call.data.startswith("sub_"):
-        # Обработка кнопки подписки
-        u_uuid = call.data.replace("sub_", "")
-        
-        # Генерируем ссылку подписки
-        subscription_url = generate_subscription_link(uid)
-        
-        if subscription_url:
-            text = (
-                f"🔗 *Ссылка подписки*\n\n"
-                f"Используйте эту ссылку как подписку в приложениях:\n\n"
-                f"`{subscription_url}`\n\n"
-                f"*Как использовать:*\n"
-                f"1. В приложении найдите раздел «Подписки»\n"
-                f"2. Добавьте новую подписку\n"
-                f"3. Вставьте эту ссылку\n"
-                f"4. Подписка обновляется автоматически!"
-            )
-        else:
-            text = "❌ Не удалось создать подписку"
-        
-        kb = InlineKeyboardMarkup()
-        if subscription_url:
-            kb.add(InlineKeyboardButton(f"{EMOJI['copy']} Скопировать подписку", 
-                                       callback_data=f"copy_sub_{u_uuid}"))
-        kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data=f"show_key_{u_uuid}"))
-        
-        bot.send_message(uid, text, reply_markup=kb, parse_mode="Markdown")
-    
-    
-    elif call.data.startswith("copy_sub_"):
-        # Копирование ссылки подписки
-        u_uuid = call.data.replace("copy_sub_", "")
-        subscription_url = generate_subscription_link(uid)
-        
-        if subscription_url:
-            bot.answer_callback_query(call.id, 
-                f"✅ Ссылка подписки скопирована!\n\n{subscription_url[:100]}...", 
-                show_alert=True
-            )
-        else:
-            bot.answer_callback_query(call.id, "❌ Не удалось создать подписку", show_alert=True)
     
     elif call.data == "referral":
         kb, ref_link, ref_stats = get_referral_menu(uid)
