@@ -1,80 +1,53 @@
+# db.py
 import sqlite3
 from datetime import datetime, timedelta
 
 conn = sqlite3.connect("vpn.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# Пользователи
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    telegram_id INTEGER PRIMARY KEY,
-    ref_code TEXT UNIQUE,
-    referred_by TEXT,
-    created_at TEXT
-)
-""")
-
-# Ключи
+# Создание таблицы ключей
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS keys (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     telegram_id INTEGER,
     uuid TEXT,
     short_id TEXT,
-    end_date TEXT
+    plan TEXT,
+    start_date TEXT,
+    end_date TEXT,
+    referral_code TEXT
 )
 """)
 conn.commit()
 
-
-def create_user(tg_id, referred_by=None):
-    ref_code = f"R{tg_id}"
-    cursor.execute(
-        "INSERT OR IGNORE INTO users VALUES (?,?,?,?)",
-        (tg_id, ref_code, referred_by, datetime.utcnow().isoformat())
-    )
+def add_key(telegram_id, uuid, short_id, plan, days, referral_code=None):
+    start = datetime.utcnow()
+    end = start + timedelta(days=days)
+    cursor.execute("""
+    INSERT INTO keys (telegram_id, uuid, short_id, plan, start_date, end_date, referral_code)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (telegram_id, uuid, short_id, plan, start.isoformat(), end.isoformat(), referral_code))
     conn.commit()
-    return ref_code
 
+def get_active_keys(telegram_id):
+    now = datetime.utcnow().isoformat()
+    cursor.execute("SELECT * FROM keys WHERE telegram_id=? AND end_date>?", (telegram_id, now))
+    return cursor.fetchall()
 
-def get_user_by_ref(ref_code):
-    cursor.execute("SELECT telegram_id FROM users WHERE ref_code=?", (ref_code,))
+def extend_key(uuid, extra_days):
+    cursor.execute("SELECT end_date FROM keys WHERE uuid=?", (uuid,))
     row = cursor.fetchone()
-    return row[0] if row else None
+    if row:
+        end = datetime.fromisoformat(row[0]) + timedelta(days=extra_days)
+        cursor.execute("UPDATE keys SET end_date=? WHERE uuid=?", (end.isoformat(), uuid))
+        conn.commit()
 
-
-def add_key(tg_id, uuid, short_id, days):
-    end = datetime.utcnow() + timedelta(days=days)
-    cursor.execute(
-        "INSERT INTO keys (telegram_id, uuid, short_id, end_date) VALUES (?,?,?,?)",
-        (tg_id, uuid, short_id, end.isoformat())
-    )
+def cleanup_expired_keys():
+    now = datetime.utcnow().isoformat()
+    cursor.execute("SELECT id, uuid FROM keys WHERE end_date<?", (now,))
+    rows = cursor.fetchall()
+    for key_id, uuid in rows:
+        # TODO: удалить пользователя с Xray API, когда будет токен
+        cursor.execute("DELETE FROM keys WHERE id=?", (key_id,))
+        print(f"[INFO] Удалён ключ {uuid}")
     conn.commit()
-
-
-def extend_key(tg_id, days):
-    cursor.execute(
-        "SELECT id, end_date FROM keys WHERE telegram_id=? ORDER BY end_date DESC LIMIT 1",
-        (tg_id,)
-    )
-    row = cursor.fetchone()
-    if not row:
-        return False
-
-    key_id, old_end = row
-    new_end = datetime.fromisoformat(old_end) + timedelta(days=days)
-
-    cursor.execute(
-        "UPDATE keys SET end_date=? WHERE id=?",
-        (new_end.isoformat(), key_id)
-    )
-    conn.commit()
-    return True
-
-
-def get_key(tg_id):
-    cursor.execute(
-        "SELECT uuid, short_id, end_date FROM keys WHERE telegram_id=? ORDER BY end_date DESC LIMIT 1",
-        (tg_id,)
-    )
-    return cursor.fetchone()
