@@ -3,11 +3,11 @@ BOT_TOKEN = "8570392401:AAFfowtqYzjxz-PCC-0IVJPx1xl5V03LCXk"
 ADMIN_ID = 8479289622
 # Данные для генерации ссылки Reality (VLESS)
 SERVER_IP = "31.130.131.214"
-SERVER_PORT = 443
-PBK = "Fc5uuBATtxZ5wNmz0YxFfHZEN2H25Cqudse7PPW_wR0"
+SERVER_PORT = 8443
+PBK = "zGchCA6m6-SGL5hZT_y3OS_uoWp5rki2TIZ-PkoVQXo"
 FP = "chrome"
 SNI = "www.microsoft.com"
-SID = "8b"  # Если в панели настроен другой ShortID, замените
+SID = "9864"  # Если в панели настроен другой ShortID, замените
 # Настройки доступа к 3X-UI
 PANEL_URL = "https://31.130.131.214:55694"
 PANEL_PATH = "xqAY0T10JV0Nut7YIp"
