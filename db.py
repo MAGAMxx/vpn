@@ -80,7 +80,7 @@ def add_user(uid, username, referrer_id=None):
     conn.commit()
     return cursor.rowcount > 0
 
-def add_key(user_id, u_uuid, sid, days, email=None):  # Добавлен email параметр
+def add_key(user_id, u_uuid, sid, days):
     """Добавляем ключ с датами в формате ISO строки"""
     start_date = datetime.datetime.now().isoformat()
     end_date = (datetime.datetime.now() + datetime.timedelta(days=days)).isoformat()
@@ -91,16 +91,10 @@ def add_key(user_id, u_uuid, sid, days, email=None):  # Добавлен email �
         WHERE user_id = ? AND is_active = 1
     """, (user_id,))
     
-    if email:
-        cursor.execute("""
-            INSERT INTO keys (user_id, uuid, sid, start_date, end_date, is_active, email)
-            VALUES (?, ?, ?, ?, ?, 1, ?)
-        """, (user_id, u_uuid, sid, start_date, end_date, email))
-    else:
-        cursor.execute("""
-            INSERT INTO keys (user_id, uuid, sid, start_date, end_date, is_active)
-            VALUES (?, ?, ?, ?, ?, 1)
-        """, (user_id, u_uuid, sid, start_date, end_date))
+    cursor.execute("""
+        INSERT INTO keys (user_id, uuid, sid, start_date, end_date, is_active)
+        VALUES (?, ?, ?, ?, ?, 1)
+    """, (user_id, u_uuid, sid, start_date, end_date))
     
     conn.commit()
     return cursor.lastrowid
