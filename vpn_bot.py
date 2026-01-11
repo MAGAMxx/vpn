@@ -490,7 +490,7 @@ def query_handler(call):
             f"{EMOJI['key']} *Ваш активный ключ*\n\n"
             f"{EMOJI['time']} *Осталось:* **{remaining}**\n"
             f"{EMOJI['traffic']} *Использовано:* **{traffic_text}**\n"
-            f"{EMOJI['calendar']} *До:* {end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y %H:%M')} МСК\n\n"
+            f"{EMOJI['time']} *Действует до:* {end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M')} МСК\n\n"
             f"{EMOJI['info']} *Что дальше?*"
         )
         
