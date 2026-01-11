@@ -27,10 +27,11 @@ def create_vless_link(telegram_id, days=30):
     link = f"vless://{u}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality&pbk={PBK}&fp={FP}&sni={SNI}&sid={sid}&spx=%2F#MAGAMIX-{telegram_id}"
     return link
 
+# Автоудаление просроченных ключей каждые 10 минут
 def cleanup_expired_keys():
     while True:
         db.delete_expired_keys()
-        threading.Event().wait(600)  # каждые 10 минут
+        threading.Event().wait(600)
 
 threading.Thread(target=cleanup_expired_keys, daemon=True).start()
 
@@ -54,11 +55,20 @@ def start(message):
             ref = int(message.text.split("-")[1])
         except:
             ref = None
+
+    # Добавляем пользователя
     db.add_user(message.from_user.id, message.from_user.username, referrer_id=ref)
-    bot.send_message(message.chat.id, f"🔥 Привет, {message.from_user.username}! Добро пожаловать в MAGAMIX VPN! 🔥", reply_markup=main_menu(message.from_user.id))
+    
+    # Продление реферального ключа
     if ref:
         db.extend_key(ref, 10)
         bot.send_message(ref, f"🎉 Пользователь @{message.from_user.username} присоединился по вашей ссылке! Ваш ключ продлен на 10 дней.")
+
+    # Главное меню
+    bot.send_message(message.chat.id,
+                     f"🔥 Привет, {message.from_user.username}! Добро пожаловать в MAGAMIX VPN! 🔥\n"
+                     "Защищай свои данные и пользуйся интернетом без ограничений!",
+                     reply_markup=main_menu(message.from_user.id))
 
 # ==================== КНОПКИ =====================
 @bot.callback_query_handler(func=lambda call: True)
@@ -84,7 +94,7 @@ def callback_handler(call):
     elif call.data.startswith("paid_"):
         plan = call.data.replace("paid_", "")
         bot.send_message(user_id, "📸 Пришлите чек перевода (фото или документ)")
-        bot.send_message(ADMIN_ID, f"💰 Новый платеж: @{call.from_user.username} — {PRICES[plan]['name']} — {PRICES[plan]['price']}₽\nНажмите кнопки ниже после проверки.")
+        bot.send_message(ADMIN_ID, f"💰 Новый платеж: @{call.from_user.username} — {PRICES[plan]['name']} — {PRICES[plan]['price']}₽")
         kb_admin = InlineKeyboardMarkup()
         kb_admin.add(InlineKeyboardButton("✅ Выдать", callback_data=f"admin_issue_{user_id}_{plan}"))
         kb_admin.add(InlineKeyboardButton("❌ Отклонить", callback_data=f"admin_decline_{user_id}_{plan}"))
