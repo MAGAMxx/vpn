@@ -8,12 +8,16 @@ import json
 import time
 import threading
 import random
+import pytz  # ← добавлен для московского времени
 import db
 from config import *
 
 requests.packages.urllib3.disable_warnings()
 bot = telebot.TeleBot(BOT_TOKEN)
 session = requests.Session()
+
+# Московский часовой пояс
+MOSCOW_TZ = pytz.timezone('Europe/Moscow')
 
 # --- Взаимодействие с 3X-UI ---
 def xui_login():
@@ -61,7 +65,7 @@ def add_user_to_xray(user_uuid, email, days):
             msg = response_data.get("msg", "")
             if "Duplicate email" in msg:
                 print(f"[ADD CLIENT] Пропуск: дубликат email {email}")
-                return True  # считаем успехом, ключ уже есть
+                return True
             print(f"[ADD CLIENT] Ошибка панели: {msg}")
             return False
     except Exception as e:
@@ -86,7 +90,7 @@ def generate_vless_link(u_uuid):
             f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#MAGAMIX_VPN")
 
 def get_remaining_time_str(end_date):
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(MOSCOW_TZ)
     delta = end_date - now
     if delta.total_seconds() <= 0:
         return "истёк"
@@ -103,9 +107,9 @@ def start_handler(message):
     
     user_keys = db.get_keys(user_id)
     
-    if not user_keys:  # Первый запуск — триал
+    if not user_keys:  # Первый раз — триал
         u_uuid = str(uuid.uuid4())
-        email = f"trial_{user_id}_{int(time.time())}"  # уникальный email
+        email = f"trial_{user_id}_{int(time.time())}"
         
         if add_user_to_xray(u_uuid, email, 3):
             db.add_key(user_id, u_uuid, SID, 3)
@@ -165,11 +169,11 @@ def query_handler(call):
 
         kb = InlineKeyboardMarkup(row_width=1)
         msg = "🔑 **Ваши ключи:**\n\n"
-        now = datetime.datetime.now()
+        now = datetime.datetime.now(MOSCOW_TZ)
 
         for row in keys:
             u_uuid = row[1]
-            end_date = row[4]  # уже datetime
+            end_date = row[4]
 
             delta = end_date - now
             if delta.total_seconds() <= 0:
@@ -180,10 +184,10 @@ def query_handler(call):
             time_str = f"{days} дн." if days >= 1 else f"{hours} ч."
 
             fake_num = random.randint(100000, 999999)
-            button_text = f"🔐 {fake_num}  ({time_str})"
+            button_text = f"🔐 {fake_num} ({time_str})"  # ← без • и "осталось"
             kb.add(InlineKeyboardButton(button_text, callback_data=f"show_key_{u_uuid}"))
 
-            msg += f"• {fake_num} — осталось **{time_str}**\n"
+            msg += f"🔐 {fake_num} ({time_str})\n"  # ← чистый список без • и "осталось"
 
         bot.edit_message_text(msg, uid, call.message.id, parse_mode="Markdown", reply_markup=kb)
     
@@ -205,25 +209,28 @@ def query_handler(call):
 
         text = (f"🔐 Ключ\n"
                 f"Осталось: **{remaining}**\n"
-                f"До: {end_date.strftime('%d.%m.%Y %H:%M')}\n\n"
-                "Нажми «Подключиться» ниже ↓")
+                f"До: {end_date.astimezone(MOSCOW_TZ).strftime('%d.%m.%Y %H:%M')} МСК\n\n"
+                f"`{link}`\n\n"
+                "Скопируй ссылку выше и вставь в приложение Happ Plus / Hiddify ↓")
         bot.edit_message_text(text, uid, call.message.id, parse_mode="Markdown", reply_markup=kb)
     
     elif call.data.startswith("connect_"):
         u_uuid = call.data.replace("connect_", "")
         link = generate_vless_link(u_uuid)
 
-        app_link = "https://t.me/hiddify_next_bot/app"  # Можно заменить на прямую ссылку Happ Plus
+        app_link = "https://t.me/hiddify_next_bot/app"  # или прямая ссылка на APK
 
         kb = InlineKeyboardMarkup()
-        kb.add(InlineKeyboardButton("🚀 Подключиться", url=link))
+        # Убрана url-кнопка с vless:// — Telegram её не поддерживает
 
         text = ("1. Скачай приложение **Happ Plus / Hiddify**\n"
                 f"   👉 {app_link}\n\n"
-                "2. Нажми кнопку ниже — ключ импортируется автоматически!")
+                "2. В приложении нажми «+» → «Импорт из буфера обмена» или «Вставить ссылку»\n"
+                "3. Скопируй ключ из сообщения выше и вставь!\n\n"
+                "Готово! Подключись и наслаждайся скоростью 🚀")
         bot.send_message(uid, text, reply_markup=kb, parse_mode="Markdown")
-        bot.answer_callback_query(call.id, "Готово! Скачай приложение и подключись")
-    
+        bot.answer_callback_query(call.id, "Ключ скопирован! Вставь в приложение")
+
     elif call.data.startswith("adm_ok_"):
         target_id = int(call.data.split("_")[2])
         plan_key = db.get_last_pending_plan(target_id)
@@ -233,12 +240,12 @@ def query_handler(call):
         
         days = PRICES[plan_key]['days']
         u_uuid = str(uuid.uuid4())
-        email = f"user_{target_id}_{int(time.time())}"  # уникальный
+        email = f"user_{target_id}_{int(time.time())}"
         
         if add_user_to_xray(u_uuid, email, days):
             db.add_key(target_id, u_uuid, SID, days)
             link = generate_vless_link(u_uuid)
-            bot.send_message(target_id, f"✅ Оплата подтверждена!\nКлюч на {days} дней:\n`{link}`", parse_mode="Markdown")
+            bot.send_message(target_id, f"✅ Оплата подтверждена!\nКлюч на {days} дней:\n\n`{link}`\n\nСкопируй и вставь в Happ Plus!", parse_mode="Markdown")
             bot.edit_message_text(f"Выдано пользователю {target_id}", ADMIN_ID, call.message.id)
         else:
             bot.send_message(ADMIN_ID, "❌ Ошибка при связи с API 3X-UI\nПроверь консоль бота!")
@@ -253,7 +260,7 @@ def handle_receipt(message):
     kb.add(InlineKeyboardButton("✅ Подтвердить", callback_data=f"adm_ok_{uid}"))
     bot.send_message(ADMIN_ID, f"Новый чек от ID {uid} (@{message.from_user.username})", reply_markup=kb)
 
-# --- Фоновая очистка просроченных ключей ---
+# --- Очистка просроченных ---
 def auto_delete_loop():
     while True:
         try:
@@ -274,5 +281,5 @@ def auto_delete_loop():
 threading.Thread(target=auto_delete_loop, daemon=True).start()
 
 if __name__ == "__main__":
-    print(f"[{datetime.datetime.now()}] Бот запущен...")
+    print(f"[{datetime.datetime.now(MOSCOW_TZ)}] Бот запущен...")
     bot.infinity_polling()
