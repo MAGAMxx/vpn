@@ -167,88 +167,37 @@ def generate_vless_link(u_uuid):
     return (f"vless://{u_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality"
             f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#🔥НИДЕРЛАНДЫ 🇳🇱")
 
-def generate_vless_link_with_custom_ui(user_id):
-    """Генерация ссылки с кастомным интерфейсом для HAPP+"""
+def generate_pro_vless_link(user_id):
+    """Для клиентов, поддерживающих расширенные параметры"""
     active_key = db.get_active_key(user_id)
     if not active_key:
         return None
     
     uuid_str = active_key[1]
-    email = active_key[6]
     
-    # Получаем статистику
-    up_gb, down_gb, total_gb = get_client_traffic_stats(email)
-    end_date = active_key[4]
-    expiry_date = end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y')
+    # Некоторые клиенты читают дополнительные параметры
+    import urllib.parse
     
-    # Форматируем трафик
-    if total_gb is not None:
-        if total_gb < 1:
-            traffic_used = f"{total_gb*1024:.1f} MB"
-        elif total_gb < 1024:
-            traffic_used = f"{total_gb:.1f} GB"
-        else:
-            traffic_used = f"{total_gb/1024:.1f} TB"
-    else:
-        traffic_used = "0 GB"
-    
-    # Создаем Subscription User Info для кастомного интерфейса
-    subscription_info = {
-        "version": 1,
-        "title": "🔥 MAGAMIX VPN",  # Заголовок вместо "Server List"
-        "icon": "https://img.icons8.com/color/96/000000/vpn.png",  # URL иконки
-        "servers": [{
-            "name": f"🇳🇱 Нидерланды | Premium",
-            "address": SERVER_IP,
-            "port": SERVER_PORT,
-            "protocol": "vless",
-            "security": "reality",
-            "sni": SNI,
-            "fingerprint": FP,
-            "publicKey": PBK,
-            "shortId": SID,
-            "flow": "xtls-rprx-vision",
-            "status": "online",
-            "ping": "25ms",
-            "load": "15%"
-        }],
-        "user": {
-            "id": uuid_str,
-            "email": email,
-            "expiry": expiry_date,
-            "traffic": {
-                "used": traffic_used,
-                "total": "∞ GB",
-                "percentage": 0
-            },
-            "referral": {
-                "code": f"ref{user_id}",
-                "reward": f"+{REFERRAL_REWARD_DAYS} дней",
-                "link": f"https://t.me/{bot.get_me().username}?start=ref{user_id}"
-            }
-        },
-        "ui": {
-            "theme": "dark",
-            "accentColor": "#FF6B35",  # Оранжевый
-            "backgroundColor": "#1A1A2E",
-            "textColor": "#FFFFFF",
-            "showTraffic": True,
-            "showExpiry": True,
-            "showReferral": True
-        }
+    # Параметры для кастомного интерфейса
+    params = {
+        "security": "reality",
+        "encryption": "none", 
+        "type": "tcp",
+        "sni": SNI,
+        "fp": FP,
+        "pbk": PBK,
+        "sid": SID,
+        "flow": "xtls-rprx-vision",
+        "remark": "🔥 MAGAMIX VPN | Premium",
+        "icon": "https://img.icons8.com/color/96/000000/diamond.png",
+        "theme": "dark",
+        "group": "MAGAMIX Servers"
     }
     
-    # Конвертируем в base64
-    subscription_json = json.dumps(subscription_info, ensure_ascii=False)
-    subscription_base64 = base64.b64encode(subscription_json.encode()).decode()
+    # Собираем параметры в строку
+    params_str = "&".join([f"{k}={urllib.parse.quote(str(v))}" for k, v in params.items()])
     
-    # Генерируем ссылку с subscriptionUserInfo
-    return (f"vless://{uuid_str}@{SERVER_IP}:{SERVER_PORT}?"
-            f"security=reality&encryption=none&type=tcp&"
-            f"sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&"
-            f"flow=xtls-rprx-vision&"
-            f"subscriptionUserInfo={subscription_base64}"
-            f"#🔥 MAGAMIX VPN")
+    return f"vless://{uuid_str}@{SERVER_IP}:{SERVER_PORT}?{params_str}#🔥 MAGAMIX VPN"
 
 def get_remaining_time_str(end_date):
     end_date_aware = MOSCOW_TZ.localize(end_date)
