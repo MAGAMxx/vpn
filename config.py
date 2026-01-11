@@ -4,7 +4,7 @@ ADMIN_ID = 8479289622
 # Данные для генерации ссылки Reality (VLESS)
 SERVER_IP = "31.130.131.214"
 SERVER_PORT = 443
-PBK = "Fc5uuBATtxZ5wNmz0YxFfHZEN2H25Cqudse7PPW_wR0"
+PBK = "IPsvWseCP_vqPcSYN_9hJJvRcPDaB-3pi7YVB3vFdxI"
 FP = "chrome"
 SNI = "www.microsoft.com"
 SID = "8b"  # Если в панели настроен другой ShortID, замените
@@ -13,7 +13,7 @@ PANEL_URL = "https://31.130.131.214:55694"
 PANEL_PATH = "xqAY0T10JV0Nut7YIp"
 PANEL_USER = "magam"  # Введите ваш логин от панели
 PANEL_PASS = "maga2192242"  # Введите ваш пароль от панели
-INBOUND_ID = 1  # ID вашего Reality-подключения в списке Inbounds
+INBOUND_ID = 2  # ID вашего Reality-подключения в списке Inbounds
 # Реквизиты
 PAY_PHONE = "79283376737"
 PAY_BANK = "Озон"
