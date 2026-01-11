@@ -8,7 +8,7 @@ import json
 import time
 import threading
 import random
-import pytz  # ← добавлен для московского времени
+import pytz  # для московского времени
 import db
 from config import *
 
@@ -16,7 +16,7 @@ requests.packages.urllib3.disable_warnings()
 bot = telebot.TeleBot(BOT_TOKEN)
 session = requests.Session()
 
-# Московский часовой пояс
+# Московский часовой пояс (UTC+3)
 MOSCOW_TZ = pytz.timezone('Europe/Moscow')
 
 # --- Взаимодействие с 3X-UI ---
@@ -90,8 +90,10 @@ def generate_vless_link(u_uuid):
             f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#MAGAMIX_VPN")
 
 def get_remaining_time_str(end_date):
-    now = datetime.datetime.now(MOSCOW_TZ)
-    delta = end_date - now
+    # end_date приходит как naive (без tz), приводим к МСК
+    end_date_msk = end_date.replace(tzinfo=MOSCOW_TZ)
+    now_msk = datetime.datetime.now(MOSCOW_TZ)
+    delta = end_date_msk - now_msk
     if delta.total_seconds() <= 0:
         return "истёк"
     if delta.days >= 1:
@@ -173,7 +175,7 @@ def query_handler(call):
 
         for row in keys:
             u_uuid = row[1]
-            end_date = row[4]
+            end_date = row[4]  # уже datetime из db.py
 
             delta = end_date - now
             if delta.total_seconds() <= 0:
@@ -184,10 +186,10 @@ def query_handler(call):
             time_str = f"{days} дн." if days >= 1 else f"{hours} ч."
 
             fake_num = random.randint(100000, 999999)
-            button_text = f"🔐 {fake_num} ({time_str})"  # ← без • и "осталось"
+            button_text = f"🔐 {fake_num} ({time_str})"
             kb.add(InlineKeyboardButton(button_text, callback_data=f"show_key_{u_uuid}"))
 
-            msg += f"🔐 {fake_num} ({time_str})\n"  # ← чистый список без • и "осталось"
+            msg += f"🔐 {fake_num} ({time_str})\n"
 
         bot.edit_message_text(msg, uid, call.message.id, parse_mode="Markdown", reply_markup=kb)
     
@@ -218,14 +220,13 @@ def query_handler(call):
         u_uuid = call.data.replace("connect_", "")
         link = generate_vless_link(u_uuid)
 
-        app_link = "https://t.me/hiddify_next_bot/app"  # или прямая ссылка на APK
+        app_link = "https://t.me/hiddify_next_bot/app"
 
         kb = InlineKeyboardMarkup()
-        # Убрана url-кнопка с vless:// — Telegram её не поддерживает
 
         text = ("1. Скачай приложение **Happ Plus / Hiddify**\n"
                 f"   👉 {app_link}\n\n"
-                "2. В приложении нажми «+» → «Импорт из буфера обмена» или «Вставить ссылку»\n"
+                "2. В приложении нажми «+» → «Импорт из буфера обмена»\n"
                 "3. Скопируй ключ из сообщения выше и вставь!\n\n"
                 "Готово! Подключись и наслаждайся скоростью 🚀")
         bot.send_message(uid, text, reply_markup=kb, parse_mode="Markdown")
@@ -281,5 +282,5 @@ def auto_delete_loop():
 threading.Thread(target=auto_delete_loop, daemon=True).start()
 
 if __name__ == "__main__":
-    print(f"[{datetime.datetime.now(MOSCOW_TZ)}] Бот запущен...")
+    print(f"[{datetime.datetime.now(MOSCOW_TZ).strftime('%Y-%m-%d %H:%M:%S')}] Бот запущен...")
     bot.infinity_polling()
