@@ -521,7 +521,7 @@ def query_handler(call):
         text = (
             f"{EMOJI['key']} *Детали ключа*\n\n"
             f"{EMOJI['time']} *Осталось:* **{remaining}**\n"
-            f"{EMOJI['calendar']} *Действует до:* {end_date_formatted}\n\n"
+            f"*Действует до:* {end_date_formatted}\n\n"
             f"{EMOJI['link']} *Ссылка подключения:*\n"
             f"`{link}`\n\n"
             f"{EMOJI['info']} *Инструкция по настройке:*\n"
