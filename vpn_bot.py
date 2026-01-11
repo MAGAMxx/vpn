@@ -113,45 +113,6 @@ def add_user_to_xray(user_uuid, email, days):
         print(f"[ADD CLIENT ERROR] {e}")
         return False
 
-def update_user_in_xray(email, new_days):
-    """Обновляет срок действия пользователя в Xray"""
-    if not xui_login():
-        return False
-    
-    try:
-        # Сначала получаем текущие настройки пользователя
-        url = f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/get/{INBOUND_ID}"
-        r = session.get(url, verify=False, timeout=10)
-        data = r.json()
-        
-        if not data.get("success"):
-            return False
-        
-        settings = json.loads(data["obj"]["settings"])
-        clients = settings.get("clients", [])
-        
-        # Находим нужного клиента
-        for client in clients:
-            if client.get("email") == email:
-                # Обновляем expiryTime
-                expiry_time = int((time.time() + (new_days * 86400)) * 1000)
-                client["expiryTime"] = expiry_time
-                break
-        
-        # Обновляем настройки
-        payload = {
-            "id": INBOUND_ID,
-            "settings": json.dumps({"clients": clients})
-        }
-        
-        update_url = f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/update/{INBOUND_ID}"
-        r = session.post(update_url, json=payload, verify=False, timeout=15)
-        return r.json().get("success", False)
-        
-    except Exception as e:
-        print(f"[UPDATE CLIENT ERROR] {e}")
-        return False
-
 def delete_user_from_xray(email):
     if not xui_login():
         return False
@@ -163,127 +124,16 @@ def delete_user_from_xray(email):
         print(f"[DEL CLIENT ERROR] {e}")
         return False
 
+def get_client_traffic_stats(email):
+    """Простая заглушка для статистики трафика"""
+    return None, None, 0  # up_gb, down_gb, total_gb
+
 # --- Вспомогательные функции ---
 def generate_vless_link(u_uuid):
+    """Генерация VLESS ссылки"""
     return (f"vless://{u_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality"
-            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#🔥НИДЕРЛАНДЫ 🇳🇱")
-
-def generate_happ_plus_link(user_id):
-    """Специально для HAPP+ с кастомным интерфейсом"""
-    active_key = db.get_active_key(user_id)
-    if not active_key:
-        return None
-    
-    uuid_str = active_key[1]
-    email = active_key[6]
-    
-    # Получаем статистику
-    up_gb, down_gb, total_gb = get_client_traffic_stats(email)
-    end_date = active_key[4]
-    
-    # Форматируем данные
-    expiry_date = end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y')
-    current_date = datetime.datetime.now(MOSCOW_TZ).strftime('%d.%m.%Y %H:%M')
-    
-    # Форматируем трафик
-    if total_gb is not None:
-        if total_gb < 1:
-            traffic_used = f"{total_gb*1024:.1f} MB"
-        elif total_gb < 1024:
-            traffic_used = f"{total_gb:.1f} GB"
-        else:
-            traffic_used = f"{total_gb/1024:.1f} TB"
-    else:
-        traffic_used = "0 GB"
-    
-    # Создаем кастомный интерфейс для HAPP+
-    subscription_info = {
-        "version": 2,
-        "title": "🔥 MAGAMIX VPN",
-        "subtitle": "Premium Netherlands Server",
-        "icon": "https://img.icons8.com/color/96/000000/vpn.png",
-        "header": {
-            "title": "MAGAMIX VPN",
-            "subtitle": "🇳🇱 Netherlands | Premium",
-            "icon": "https://img.icons8.com/color/96/000000/netherlands.png"
-        },
-        "servers": [{
-            "name": "🇳🇱 Netherlands | Premium",
-            "type": "vless",
-            "address": SERVER_IP,
-            "port": SERVER_PORT,
-            "id": uuid_str,
-            "security": "reality",
-            "flow": "xtls-rprx-vision",
-            "sni": SNI,
-            "fingerprint": FP,
-            "publicKey": PBK,
-            "shortId": SID,
-            "status": "🟢 Online",
-            "ping": "25ms",
-            "load": "15%"
-        }],
-        "user": {
-            "id": str(user_id),
-            "expiry": expiry_date,
-            "remaining": get_remaining_time_str(end_date),
-            "traffic": {
-                "used": traffic_used,
-                "total": "∞ GB",
-                "percentage": 0
-            }
-        },
-        "referral": {
-            "enabled": True,
-            "code": f"ref{user_id}",
-            "reward": f"+{REFERRAL_REWARD_DAYS} дней",
-            "message": f"Пригласи друга и получи +{REFERRAL_REWARD_DAYS} дней!"
-        },
-        "ui": {
-            "theme": "dark",
-            "primaryColor": "#FF6B35",
-            "backgroundColor": "#0F172A",
-            "cardColor": "#1E293B",
-            "textColor": "#F8FAFC",
-            "showStats": True,
-            "showTrafficChart": True,
-            "compactMode": False
-        },
-        "meta": {
-            "provider": "MAGAMIX VPN",
-            "website": "https://t.me/" + str(bot.get_me().username),
-            "support": "@nejnayatp3",
-            "version": "1.0"
-        }
-    }
-    
-    # Конвертируем в base64
-    subscription_json = json.dumps(subscription_info, ensure_ascii=False, indent=2)
-    subscription_base64 = base64.b64encode(subscription_json.encode()).decode()
-    
-    # Генерируем ссылку
-    base_link = (f"vless://{uuid_str}@{SERVER_IP}:{SERVER_PORT}?"
-                 f"security=reality&encryption=none&type=tcp&"
-                 f"sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&"
-                 f"flow=xtls-rprx-vision")
-    
-    # Добавляем subscriptionUserInfo если поддерживается
-    if len(subscription_base64) + len(base_link) < 2000:  # Telegram limit
-        link = f"{base_link}&subscriptionUserInfo={subscription_base64}#🔥 MAGAMIX VPN"
-    else:
-        # Если слишком длинная, используем простую версию
-        link = f"{base_link}#🔥 MAGAMIX VPN | 🇳🇱 | {expiry_date}"
-    
-    return link
-
-def generate_vless_link(uuid_str):
-    """Базовая генерация VLESS ссылки (на всякий случай)"""
-    return (f"vless://{uuid_str}@{SERVER_IP}:{SERVER_PORT}?"
-            f"security=reality&encryption=none&type=tcp&"
-            f"sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&"
-            f"flow=xtls-rprx-vision"
-            f"#🔥 MAGAMIX VPN")
-
+            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F&flow=xtls-rprx-vision"
+            f"#🔥НИДЕРЛАНДЫ 🇳🇱")
 
 def get_remaining_time_str(end_date):
     end_date_aware = MOSCOW_TZ.localize(end_date)
@@ -320,17 +170,6 @@ def give_referral_reward(referrer_id, referred_id):
             # Продлеваем существующий ключ на 5 дней
             success = db.extend_key_days(referrer_id, REFERRAL_REWARD_DAYS)
             if success:
-                # Обновляем в Xray
-                uuid_val = active_key[1]
-                email = f"user_{referrer_id}_{uuid_val[:8]}"
-                
-                # Получаем новую дату окончания
-                new_end_date = active_key[4] + datetime.timedelta(days=REFERRAL_REWARD_DAYS)
-                days_until_new_end = (new_end_date - datetime.datetime.now()).days
-                
-                if days_until_new_end > 0:
-                    update_user_in_xray(email, days_until_new_end)
-                
                 # Записываем награду в БД
                 db.add_referral_reward(referrer_id, referred_id, REFERRAL_REWARD_DAYS)
                 
@@ -354,7 +193,7 @@ def give_referral_reward(referrer_id, referred_id):
             email = f"ref_{referrer_id}_{int(time.time())}"
             
             if add_user_to_xray(u_uuid, email, REFERRAL_REWARD_DAYS):
-                db.add_key(referrer_id, u_uuid, SID, REFERRAL_REWARD_DAYS)
+                db.add_key(referrer_id, u_uuid, SID, REFERRAL_REWARD_DAYS, email)
                 db.add_referral_reward(referrer_id, referred_id, REFERRAL_REWARD_DAYS)
                 
                 # Отправляем уведомление рефереру
@@ -421,31 +260,6 @@ def get_instructions_menu(uuid_key=None):
     kb.add(InlineKeyboardButton(f"{EMOJI['home']} В главное меню", callback_data="main"))
     return kb
 
-def get_referral_menu(user_id):
-    """Меню реферальной системы"""
-    kb = InlineKeyboardMarkup(row_width=1)
-    
-    # Генерируем реферальную ссылку
-    ref_link = generate_referral_link(user_id)
-    
-    # Получаем статистику
-    ref_stats = db.get_referrals_stats(user_id)
-    
-    kb.add(InlineKeyboardButton(
-        f"{EMOJI['invite']} Скопировать ссылку", 
-        callback_data=f"copy_ref_{user_id}"
-    ))
-    
-    kb.add(InlineKeyboardButton(
-        f"{EMOJI['stats']} Моя статистика", 
-        callback_data="ref_stats"
-    ))
-    
-    kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
-    kb.add(InlineKeyboardButton(f"{EMOJI['home']} В главное меню", callback_data="main"))
-    
-    return kb, ref_link, ref_stats
-
 # --- Обработка команд ---
 @bot.message_handler(commands=['start'])
 def start_handler(message):
@@ -474,7 +288,6 @@ def start_handler(message):
         if not success:
             print(f"Не удалось выдать награду рефереру {referrer_id}")
     
-    user_keys = db.get_keys(user_id)
     active_key = db.get_active_key(user_id)
     
     if not active_key:  # Первый раз — триал
@@ -482,7 +295,7 @@ def start_handler(message):
         email = f"trial_{user_id}_{int(time.time())}"
         
         if add_user_to_xray(u_uuid, email, 3):
-            db.add_key(user_id, u_uuid, SID, 3)
+            db.add_key(user_id, u_uuid, SID, 3, email)
             text = (
                 f"{EMOJI['crown']} *Добро пожаловать в MAGAMIX VPN* {EMOJI['fire']}\n\n"
                 f"{EMOJI['star']} *Вам выдан БЕСПЛАТНЫЙ пробный период на 3 дня!*\n"
@@ -571,7 +384,6 @@ def query_handler(call):
                              reply_markup=kb, parse_mode="Markdown")
     
     elif call.data == "my_keys":
-        keys = db.get_keys(uid)
         active_key = db.get_active_key(uid)
         
         if not active_key:
@@ -621,7 +433,7 @@ def query_handler(call):
         bot.edit_message_text(text, uid, call.message.id, 
                              reply_markup=kb, parse_mode="Markdown")
     
-   elif call.data.startswith("show_key_"):
+    elif call.data.startswith("show_key_"):
         u_uuid = call.data.replace("show_key_", "")
         db.cursor.execute("SELECT end_date FROM keys WHERE uuid=? AND user_id=?", (u_uuid, uid))
         row = db.cursor.fetchone()
@@ -629,37 +441,19 @@ def query_handler(call):
             bot.answer_callback_query(call.id, "Ключ не найден")
             return
 
-        end_date_str = row[0]  # Измените здесь
+        end_date_str = row[0]
         end_date = datetime.datetime.fromisoformat(end_date_str)
         remaining = get_remaining_time_str(end_date)
         
-        # Без email - создаем фиктивный
-        email = f"user_{uid}_{u_uuid[:8]}"
+        # Генерируем ссылку
+        link = generate_vless_link(u_uuid)
         
-        # Генерируем ссылку для HAPP+ с красивым профилем
-        link = generate_happ_plus_link(uid)
-        if not link:
-            link = generate_vless_link(u_uuid)
-        
-        # Форматируем данные для отображения
+        # Форматируем дату окончания
         end_date_formatted = end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M') + ' МСК'
-        
-        # Показываем статистику трафика
-        traffic_info = ""
-        if total_gb is not None:
-            if total_gb < 1:
-                traffic_info = f"{total_gb*1024:.1f} MB"
-            elif total_gb < 1024:
-                traffic_info = f"{total_gb:.1f} GB"
-            else:
-                traffic_info = f"{total_gb/1024:.1f} TB"
-        else:
-            traffic_info = "0 GB"
 
         text = (
             f"{EMOJI['key']} *Детали ключа*\n\n"
             f"{EMOJI['time']} *Осталось:* **{remaining}**\n"
-            f"{EMOJI['traffic']} *Использовано:* **{traffic_info}**\n"
             f"*Действует до:* {end_date_formatted}\n\n"
             f"{EMOJI['link']} *Ссылка подключения:*\n"
             f"`{link}`\n\n"
@@ -667,8 +461,7 @@ def query_handler(call):
             f"1. Скачайте приложение *Happ Plus* \n"
             f"2. Нажмите «+» → «Импорт из буфера обмена»\n"
             f"3. Скопируйте ссылку выше и вставьте в приложение\n"
-            f"4. В HAPP+ вы увидите красивый интерфейс с иконкой!\n"
-            f"5. Активируйте подключение и наслаждайтесь! {EMOJI['rocket']}"
+            f"4. Активируйте подключение и наслаждайтесь! {EMOJI['rocket']}"
         )
         
         bot.edit_message_text(text, uid, call.message.id, 
@@ -689,7 +482,19 @@ def query_handler(call):
             bot.answer_callback_query(call.id, "✅ Ключ скопирован! Вставьте в приложение", show_alert=True)
     
     elif call.data == "referral":
-        kb, ref_link, ref_stats = get_referral_menu(uid)
+        ref_link = generate_referral_link(uid)
+        ref_stats = db.get_referrals_stats(uid)
+        
+        kb = InlineKeyboardMarkup(row_width=1)
+        kb.add(InlineKeyboardButton(
+            f"{EMOJI['invite']} Скопировать ссылку", 
+            callback_data=f"copy_ref_{uid}"
+        ))
+        kb.add(InlineKeyboardButton(
+            f"{EMOJI['stats']} Моя статистика", 
+            callback_data="ref_stats"
+        ))
+        kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
         
         text = (
             f"{EMOJI['friends']} *Пригласите друга — получите бонус!* {EMOJI['gift']}\n\n"
@@ -780,7 +585,7 @@ def query_handler(call):
         email = f"user_{target_id}_{int(time.time())}"
         
         if add_user_to_xray(u_uuid, email, days):
-            db.add_key(target_id, u_uuid, SID, days)
+            db.add_key(target_id, u_uuid, SID, days, email)
             link = generate_vless_link(u_uuid)
             
             success_text = (
@@ -815,7 +620,7 @@ def handle_receipt(message):
     bot.forward_message(ADMIN_ID, message.chat.id, message.id)
     
     kb = InlineKeyboardMarkup()
-    kb.add(InlineKeyboardButton(f"{EMOJI['check']} Подтвердить оплату", 
+    kb.add(InlineKeyboardButton(f"{EMOJI['check']} Подтвердить оплата", 
                                callback_data=f"adm_ok_{uid}"))
     
     bot.send_message(ADMIN_ID, 
