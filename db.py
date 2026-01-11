@@ -1,111 +1,131 @@
-import sqlite3
-import datetime
+import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+import datetime, uuid, requests, json, time, threading, random
+import db
+from config import *
 
-# Подключение к базе данных
-# check_same_thread=False нужен для работы sqlite в разных потоках (фоновая очистка + бот)
-conn = sqlite3.connect("vpn.db", check_same_thread=False)
-cursor = conn.cursor()
+# Отключаем проверку SSL для работы по IP
+requests.packages.urllib3.disable_warnings()
 
-def init_db():
-    """Инициализация таблиц при первом запуске"""
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        telegram_id INTEGER PRIMARY KEY,
-        username TEXT,
-        referrer_id INTEGER,
-        first_joined TIMESTAMP
-    )
-    """)
+bot = telebot.TeleBot(BOT_TOKEN)
+session = requests.Session()
 
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS keys (
-        telegram_id INTEGER,
-        uuid TEXT,
-        short_id TEXT,
-        start_date TIMESTAMP,
-        end_date TIMESTAMP
-    )
-    """)
+def xui_login():
+    try:
+        r = session.post(f"{PANEL_URL}/{PANEL_PATH}/login", 
+                         data={"username": PANEL_USER, "password": PANEL_PASS}, 
+                         verify=False, timeout=5)
+        return r.status_code == 200
+    except: return False
 
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS payments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        telegram_id INTEGER,
-        plan TEXT,
-        status TEXT,
-        created_at TIMESTAMP
-    )
-    """)
-    conn.commit()
+def add_xray_client(u_uuid, email, days):
+    if not xui_login(): return False
+    expiry = int((time.time() + (days * 86400)) * 1000)
+    payload = {"id": INBOUND_ID, "settings": json.dumps({"clients": [{"id": u_uuid, "email": email, "expiryTime": expiry, "enable": True}]})}
+    try:
+        r = session.post(f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/addClient", json=payload, verify=False)
+        return r.json().get("success", False)
+    except: return False
 
-# Вызываем инициализацию сразу
-init_db()
+def del_xray_client(email):
+    if not xui_login(): return False
+    try:
+        r = session.post(f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/delClient/{INBOUND_ID}/{email}", verify=False)
+        return r.json().get("success", False)
+    except: return False
 
-# ===== Пользователи =====
-def add_user(telegram_id, username, referrer_id=None):
-    cursor.execute("INSERT OR IGNORE INTO users VALUES (?, ?, ?, ?)",
-                   (telegram_id, username, referrer_id, datetime.datetime.now()))
-    conn.commit()
+def gen_link(u_uuid):
+    return f"vless://{u_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}#MAGAMIX_VPN"
 
-def get_user(telegram_id):
-    cursor.execute("SELECT * FROM users WHERE telegram_id=?", (telegram_id,))
-    return cursor.fetchone()
+@bot.message_handler(commands=['start'])
+def start_handler(message):
+    uid = message.from_user.id
+    db.add_user(uid, message.from_user.username)
+    
+    # Выдача триала новым
+    if not db.get_keys_with_expiry(uid):
+        u_uuid = str(uuid.uuid4())
+        if add_xray_client(u_uuid, f"trial_{uid}", 3):
+            db.add_key(uid, u_uuid, 3)
+            bot.send_message(uid, "🎁 Тебе выдан пробный период 3 дня!\n\n✅ Ключ уже доступен в разделе **(Мои ключи)**!", parse_mode="Markdown")
 
-# ===== Ключи =====
-def add_key(telegram_id, uuid_val, short_id, days):
-    start = datetime.datetime.now()
-    end = start + datetime.timedelta(days=days)
-    cursor.execute("INSERT INTO keys VALUES (?, ?, ?, ?, ?)",
-                   (telegram_id, uuid_val, short_id, start, end))
-    conn.commit()
+    kb = InlineKeyboardMarkup(row_width=2)
+    kb.add(InlineKeyboardButton("💳 Купить VPN", callback_data="buy"),
+           InlineKeyboardButton("🔑 Мои ключи", callback_data="my_keys"))
+    bot.send_message(uid, "🔥 Добро пожаловать в MAGAMIX VPN!", reply_markup=kb)
 
-def get_keys(telegram_id):
-    """Возвращает список uuid активных ключей пользователя"""
-    cursor.execute("SELECT uuid FROM keys WHERE telegram_id=? AND end_date > ?", 
-                   (telegram_id, datetime.datetime.now()))
-    rows = cursor.fetchall()
-    return [row[0] for row in rows]
+@bot.callback_query_handler(func=lambda call: True)
+def callback_handler(call):
+    uid = call.from_user.id
 
-def get_all_expired_keys():
-    """Возвращает список (telegram_id, uuid) для тех, чей срок истек"""
-    now = datetime.datetime.now()
-    cursor.execute("SELECT telegram_id, uuid FROM keys WHERE end_date < ?", (now,))
-    return cursor.fetchall()
+    if call.data == "buy":
+        kb = InlineKeyboardMarkup()
+        for k, v in PRICES.items():
+            kb.add(InlineKeyboardButton(f"{v['name']} — {v['price']}₽", callback_data=f"plan_{k}"))
+        bot.edit_message_text("Выберите тариф:", uid, call.message.id, reply_markup=kb)
 
-def delete_key_by_uuid(uuid_val):
-    """Полное удаление ключа из базы"""
-    cursor.execute("DELETE FROM keys WHERE uuid=?", (uuid_val,))
-    conn.commit()
+    elif call.data.startswith("plan_"):
+        plan_key = call.data.replace("plan_", "")
+        db.add_payment(uid, plan_key)
+        text = f"💳 **Оплата {PRICES[plan_key]['price']}₽**\n\nБанк: {PAY_BANK}\nНомер: `{PAY_PHONE}`\n\nПришлите скриншот чека боту."
+        bot.edit_message_text(text, uid, call.message.id, parse_mode="Markdown")
 
-def extend_key(telegram_id, days):
-    """Продление существующего ключа (если он есть)"""
-    cursor.execute("SELECT end_date, uuid FROM keys WHERE telegram_id=? ORDER BY end_date DESC LIMIT 1", (telegram_id,))
-    row = cursor.fetchone()
-    if row:
-        current_end = datetime.datetime.fromisoformat(str(row[0]))
-        # Если ключ уже истек, продлеваем от текущего момента, если нет - добавляем к остатку
-        base_date = max(current_end, datetime.datetime.now())
-        new_end = base_date + datetime.timedelta(days=days)
-        cursor.execute("UPDATE keys SET end_date=? WHERE uuid=?", (new_end, row[1]))
-        conn.commit()
-        return True
-    return False
+    elif call.data == "my_keys":
+        keys = db.get_keys_with_expiry(uid)
+        if not keys:
+            bot.answer_callback_query(call.id, "У вас нет активных ключей.")
+            return
 
-# ===== Платежи =====
-def add_payment(telegram_id, plan):
-    """Запись о намерении совершить платеж"""
-    cursor.execute("INSERT INTO payments (telegram_id, plan, status, created_at) VALUES (?, ?, ?, ?)", 
-                   (telegram_id, plan, "pending", datetime.datetime.now()))
-    conn.commit()
+        kb = InlineKeyboardMarkup()
+        for u_uuid, end_date in keys:
+            # Расчет дней
+            dt = datetime.datetime.fromisoformat(str(end_date))
+            days_left = (dt - datetime.datetime.now()).days
+            if days_left < 0: days_left = 0
+            
+            # Кнопка с рандомным числом
+            rand_id = random.randint(10000, 99999)
+            kb.add(InlineKeyboardButton(f"🔐 {rand_id} ({days_left} дней)", callback_data=f"show_{u_uuid}"))
+        
+        bot.edit_message_text("🔑 Ваши ключи:", uid, call.message.id, reply_markup=kb)
 
-def get_last_pending_plan(telegram_id):
-    """Получает название тарифа из последнего неоплаченного счета"""
-    cursor.execute("SELECT plan FROM payments WHERE telegram_id=? AND status='pending' ORDER BY id DESC LIMIT 1", (telegram_id,))
-    row = cursor.fetchone()
-    return row[0] if row else "1m"
+    elif call.data.startswith("show_"):
+        u_uuid = call.data.replace("show_", "")
+        # Ищем дату в базе вручную для отображения
+        db.cursor.execute("SELECT end_date FROM keys WHERE uuid=?", (u_uuid,))
+        row = db.cursor.fetchone()
+        if row:
+            expiry_date = datetime.datetime.fromisoformat(str(row[0])).strftime("%d.%m.%Y")
+            bot.send_message(uid, f"📍 **Ваш ключ:**\n\nДействует до: `{expiry_date}`\n\n`{gen_link(u_uuid)}`", parse_mode="Markdown")
 
-def set_payment_status(telegram_id, plan, status):
-    """Обновляет статус платежа"""
-    cursor.execute("UPDATE payments SET status=? WHERE telegram_id=? AND plan=? AND status='pending'", 
-                   (status, telegram_id, plan))
-    conn.commit()
+    elif call.data.startswith("adm_ok_"):
+        tid = int(call.data.split("_")[2])
+        pk = db.get_last_pending_plan(tid)
+        days = PRICES[pk]['days']
+        u_uuid = str(uuid.uuid4())
+        
+        if add_xray_client(u_uuid, f"user_{tid}", days):
+            db.add_key(tid, u_uuid, days)
+            bot.send_message(tid, f"✅ Оплата подтверждена! Ключ на {days} дней добавлен в раздел **(Мои ключи)**.")
+            bot.edit_message_text(f"✅ Выдано пользователю {tid}", ADMIN_ID, call.message.id)
+
+@bot.message_handler(content_types=['photo'])
+def photo_handler(message):
+    bot.forward_message(ADMIN_ID, message.chat.id, message.id)
+    kb = InlineKeyboardMarkup().add(InlineKeyboardButton("✅ Подтвердить", callback_data=f"adm_ok_{message.from_user.id}"))
+    bot.send_message(ADMIN_ID, f"🧾 Чек от @{message.from_user.username} (ID: {message.from_user.id})", reply_markup=kb)
+    bot.reply_to(message, "⏳ Чек отправлен на проверку администратору.")
+
+def cleanup_loop():
+    while True:
+        expired = db.get_all_expired_keys()
+        for tid, u_uuid in expired:
+            # Пробуем удалить оба типа email
+            if del_xray_client(f"user_{tid}") or del_xray_client(f"trial_{tid}"):
+                db.delete_key_by_uuid(u_uuid)
+                try: bot.send_message(tid, "🔴 Срок действия вашего VPN ключа истек.")
+                except: pass
+        time.sleep(3600)
+
+threading.Thread(target=cleanup_loop, daemon=True).start()
+bot.infinity_polling()
