@@ -4,7 +4,7 @@ ADMIN_ID = 8479289622
 # Данные для генерации ссылки Reality (VLESS)
 SERVER_IP = "31.130.131.214"
 SERVER_PORT = 443
-PBK = "IPsvWseCP_vqPcSYN_9hJJvRcPDaB-3pi7YVB3vFdxI"
+PBK = "Fc5uuBATtxZ5wNmz0YxFfHZEN2H25Cqudse7PPW_wR0"
 FP = "chrome"
 SNI = "www.microsoft.com"
 SID = "8b"  # Если в панели настроен другой ShortID, замените
