@@ -15,12 +15,12 @@ requests.packages.urllib3.disable_warnings()
 bot = telebot.TeleBot(BOT_TOKEN)
 session = requests.Session()
 
-# --- Взаимодействие с 3X-UI через API ---
+# --- Взаимодействие с 3X-UI ---
 def xui_login():
     try:
         login_url = f"{PANEL_URL}/{PANEL_PATH}/login"
         r = session.post(login_url, data={"username": PANEL_USER, "password": PANEL_PASS}, verify=False, timeout=10)
-        print(f"[LOGIN] Status: {r.status_code} | Response: {r.text[:200]}...")  # ← отладка
+        print(f"[LOGIN] Status: {r.status_code} | Response: {r.text[:200]}...")
         return r.status_code == 200
     except Exception as e:
         print(f"[LOGIN ERROR] {e}")
@@ -40,7 +40,7 @@ def add_user_to_xray(user_uuid, email, days):
                 "id": user_uuid,
                 "alterId": 0,
                 "email": email,
-                "limitIp": 2,           # ← лимит 2 устройства
+                "limitIp": 2,
                 "totalGB": 0,
                 "expiryTime": expiry_time,
                 "enable": True,
@@ -51,10 +51,19 @@ def add_user_to_xray(user_uuid, email, days):
     }
     
     try:
-        url = f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/addClient"   # ← можно попробовать убрать /panel/
+        url = f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/addClient"
         r = session.post(url, json=payload, verify=False, timeout=15)
-        print(f"[ADD CLIENT] Status: {r.status_code} | Response: {r.text[:300]}...")  # ← важная отладка!
-        return r.json().get("success", False) if r.ok else False
+        print(f"[ADD CLIENT] Status: {r.status_code} | Response: {r.text[:300]}...")
+        response_data = r.json()
+        if response_data.get("success"):
+            return True
+        else:
+            msg = response_data.get("msg", "")
+            if "Duplicate email" in msg:
+                print(f"[ADD CLIENT] Пропуск: дубликат email {email}")
+                return True  # считаем успехом, ключ уже есть
+            print(f"[ADD CLIENT] Ошибка панели: {msg}")
+            return False
     except Exception as e:
         print(f"[ADD CLIENT ERROR] {e}")
         return False
@@ -65,8 +74,8 @@ def delete_user_from_xray(email):
     try:
         url = f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/{INBOUND_ID}/delClient/{email}"
         r = session.post(url, verify=False, timeout=10)
-        print(f"[DEL CLIENT] Status: {r.status_code} | Response: {r.text[:200]}...")  # ← отладка
-        return r.json().get("success", False) if r.ok else False
+        print(f"[DEL CLIENT] Status: {r.status_code} | Response: {r.text[:200]}...")
+        return r.json().get("success", False)
     except Exception as e:
         print(f"[DEL CLIENT ERROR] {e}")
         return False
@@ -93,20 +102,38 @@ def start_handler(message):
     db.add_user(user_id, message.from_user.username)
     
     user_keys = db.get_keys(user_id)
-    if not user_keys:
+    
+    if not user_keys:  # Первый запуск — триал
         u_uuid = str(uuid.uuid4())
-        email = f"trial_{user_id}"
+        email = f"trial_{user_id}_{int(time.time())}"  # уникальный email
+        
         if add_user_to_xray(u_uuid, email, 3):
             db.add_key(user_id, u_uuid, SID, 3)
-            link = generate_vless_link(u_uuid)
-            bot.send_message(user_id, f"🎁 Привет! Тебе выдан пробный период на 3 дня!\n\nКлюч:\n`{link}`", parse_mode="Markdown")
-    
+            text = (
+                "Привет! Добро пожаловать в MAGAMIX VPN 🔥\n\n"
+                "🎁 Тебе автоматически выдан бесплатный пробный период на 3 дня!\n"
+                "Ключ уже доступен в разделе «Мои ключи» — просто нажми кнопку ниже.\n\n"
+                "Выбери действие:"
+            )
+        else:
+            text = (
+                "Привет! Добро пожаловать в MAGAMIX VPN 🔥\n\n"
+                "Не удалось выдать пробный период (возможно технические работы).\n"
+                "Напиши в поддержку @nejnayatp3\n\n"
+                "Выбери действие:"
+            )
+    else:
+        text = (
+            "Привет! Рад тебя видеть снова в MAGAMIX VPN 🔥\n\n"
+            "Выбери действие ниже 👇"
+        )
+
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(InlineKeyboardButton("💳 Купить VPN", callback_data="buy"),
            InlineKeyboardButton("🔑 Мои ключи", callback_data="my_keys"))
     kb.add(InlineKeyboardButton("🆘 Тех. поддержка", url="https://t.me/nejnayatp3"))
     
-    bot.send_message(user_id, "Добро пожаловать в MAGAMIX VPN!", reply_markup=kb)
+    bot.send_message(user_id, text, reply_markup=kb)
 
 @bot.callback_query_handler(func=lambda call: True)
 def query_handler(call):
@@ -138,11 +165,12 @@ def query_handler(call):
 
         kb = InlineKeyboardMarkup(row_width=1)
         msg = "🔑 **Ваши ключи:**\n\n"
-
         now = datetime.datetime.now()
+
         for row in keys:
             u_uuid = row[1]
-            end_date = row[4]
+            end_date = row[4]  # уже datetime
+
             delta = end_date - now
             if delta.total_seconds() <= 0:
                 continue
@@ -167,7 +195,8 @@ def query_handler(call):
             bot.answer_callback_query(call.id, "Ключ не найден")
             return
 
-        end_date = datetime.datetime.fromisoformat(str(row[0]))
+        end_date_str = str(row[0])
+        end_date = datetime.datetime.fromisoformat(end_date_str)
         remaining = get_remaining_time_str(end_date)
         link = generate_vless_link(u_uuid)
 
@@ -184,7 +213,7 @@ def query_handler(call):
         u_uuid = call.data.replace("connect_", "")
         link = generate_vless_link(u_uuid)
 
-        app_link = "https://t.me/hiddify_next_bot/app"  # ← ссылка на Happ Plus / Hiddify (можно заменить на прямую)
+        app_link = "https://t.me/hiddify_next_bot/app"  # Можно заменить на прямую ссылку Happ Plus
 
         kb = InlineKeyboardMarkup()
         kb.add(InlineKeyboardButton("🚀 Подключиться", url=link))
@@ -192,7 +221,6 @@ def query_handler(call):
         text = ("1. Скачай приложение **Happ Plus / Hiddify**\n"
                 f"   👉 {app_link}\n\n"
                 "2. Нажми кнопку ниже — ключ импортируется автоматически!")
-        
         bot.send_message(uid, text, reply_markup=kb, parse_mode="Markdown")
         bot.answer_callback_query(call.id, "Готово! Скачай приложение и подключись")
     
@@ -205,7 +233,7 @@ def query_handler(call):
         
         days = PRICES[plan_key]['days']
         u_uuid = str(uuid.uuid4())
-        email = f"user_{target_id}"
+        email = f"user_{target_id}_{int(time.time())}"  # уникальный
         
         if add_user_to_xray(u_uuid, email, days):
             db.add_key(target_id, u_uuid, SID, days)
@@ -225,7 +253,7 @@ def handle_receipt(message):
     kb.add(InlineKeyboardButton("✅ Подтвердить", callback_data=f"adm_ok_{uid}"))
     bot.send_message(ADMIN_ID, f"Новый чек от ID {uid} (@{message.from_user.username})", reply_markup=kb)
 
-# --- Очистка просроченных ---
+# --- Фоновая очистка просроченных ключей ---
 def auto_delete_loop():
     while True:
         try:
@@ -236,7 +264,7 @@ def auto_delete_loop():
                 if deleted:
                     db.delete_key_by_uuid(u_uuid)
                     try:
-                        bot.send_message(user_id, "🔴 Ключ истёк и был удалён.")
+                        bot.send_message(user_id, "🔴 Ключ истёк и был автоматически удалён.")
                     except:
                         pass
         except Exception as e:
