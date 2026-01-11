@@ -1,9 +1,8 @@
 # vpn_bot.py
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-import uuid, random
+import uuid, random, requests, threading, time
 from datetime import datetime, timedelta
-import requests
 from db import add_key, get_active_keys, extend_key, cleanup_expired_keys, add_referral, check_referral
 from config import BOT_TOKEN, ADMIN_ID, PAY_PHONE, PAY_BANK, PRICES, SERVER_IP, SERVER_PORT, PBK, FP, SNI, XRAY_API_URL, XRAY_API_TOKEN
 
@@ -15,6 +14,7 @@ HEADERS = {"Content-Type": "application/json"}
 if XRAY_API_TOKEN:
     HEADERS["Authorization"] = f"Bearer {XRAY_API_TOKEN}"
 
+# --- Главное меню ---
 def main_menu():
     kb = InlineKeyboardMarkup()
     kb.add(InlineKeyboardButton("💳 Купить VPN", callback_data="buy"))
@@ -22,11 +22,12 @@ def main_menu():
     kb.add(InlineKeyboardButton("🔑 Мои ключи", callback_data="mykeys"))
     return kb
 
+# --- Создание ключа и регистрация в Xray ---
 def create_vless_link(telegram_id, plan_days):
     user_uuid = str(uuid.uuid4())
     sid = random.choice(SHORT_IDS)
 
-    # POST запрос к Xray API для создания клиента
+    # POST к Xray API
     payload = {
         "add": [
             {
@@ -46,13 +47,14 @@ def create_vless_link(telegram_id, plan_days):
         if resp.status_code == 200:
             print(f"[INFO] Клиент создан на Xray: {user_uuid}")
         else:
-            print(f"[ERROR] Xray API: {resp.status_code}, {resp.text}")
+            print(f"[ERROR] Xray API: {resp.status_code} {resp.text}")
     except Exception as e:
         print(f"[ERROR] Не удалось создать клиента на Xray: {e}")
 
     add_key(telegram_id, user_uuid, sid, "manual", plan_days)
     return f"vless://{user_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality&pbk={PBK}&fp={FP}&sni={SNI}&sid={sid}&spx=%2F#MAGAMIX-{telegram_id}"
 
+# --- Удаление пользователя с Xray ---
 def delete_xray_user(user_uuid):
     try:
         url = f"{XRAY_API_URL}/v1/clients/{user_uuid}"
@@ -64,6 +66,7 @@ def delete_xray_user(user_uuid):
     except Exception as e:
         print(f"[ERROR] Исключение при удалении клиента Xray: {e}")
 
+# --- Автоудаление ключей ---
 def cleanup_expired_keys_full():
     import sqlite3
     conn = sqlite3.connect("vpn.db")
@@ -82,7 +85,7 @@ def cleanup_expired_keys_full():
 @bot.message_handler(commands=['start'])
 def start_handler(message):
     bot.send_message(message.chat.id,
-        "🔥 Добро пожаловать в MAGAMIX VPN! 🔥\n\nС нами вы получаете защиту данных и свободу интернета!\n\nВыбери тариф и начни прямо сейчас! 💻🛡",
+        "🔥 Добро пожаловать в MAGAMIX VPN! 🔥\n\nС нами вы получаете свободу интернета и защиту данных!\nВыберите тариф и начните пользоваться прямо сейчас 💻🛡",
         reply_markup=main_menu())
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -122,6 +125,7 @@ def callback_handler(call):
             link = f"vless://{k[2]}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality&pbk={PBK}&fp={FP}&sni={SNI}&sid={k[3]}&spx=%2F#MAGAMIX-{call.from_user.id}"
             bot.send_message(call.message.chat.id, f"Ваш ключ ({k[4]}):\n{link}")
 
+# --- Чеки оплаты ---
 @bot.message_handler(content_types=['photo', 'document'])
 def handle_check(message):
     user_id = message.from_user.id
@@ -157,7 +161,6 @@ def invite_handler(message):
     if not ref_user_id:
         bot.reply_to(message, "Неверный реферальный код.")
         return
-    # Продление ключа на 10 дней
     extended = extend_key(ref_user_id, 10)
     if extended:
         add_referral(ref_user_id, message.from_user.id)
@@ -167,12 +170,11 @@ def invite_handler(message):
         create_vless_link(ref_user_id, 10)
         bot.reply_to(message, "✅ Новый ключ создан на 10 дней за приглашение!")
 
-# --- Автоочистка ключей каждые 10 минут ---
-import threading, time
+# --- Автоочистка ключей ---
 def auto_cleanup_loop():
     while True:
         cleanup_expired_keys_full()
-        time.sleep(600)  # 10 минут
+        time.sleep(600)  # каждые 10 минут
 
 threading.Thread(target=auto_cleanup_loop, daemon=True).start()
 
