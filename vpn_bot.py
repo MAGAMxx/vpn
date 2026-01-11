@@ -1,4 +1,3 @@
-# bot.py
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import datetime
@@ -7,7 +6,6 @@ import requests
 import json
 import time
 import threading
-import random
 import pytz
 import db
 from config import *
@@ -19,12 +17,43 @@ session = requests.Session()
 # Московский часовой пояс
 MOSCOW_TZ = pytz.timezone('Europe/Moscow')
 
+# Emoji для оформления
+EMOJI = {
+    "home": "🏠",
+    "back": "↩️",
+    "key": "🔑",
+    "buy": "💳",
+    "support": "🆘",
+    "time": "⏰",
+    "link": "🔗",
+    "copy": "📋",
+    "check": "✅",
+    "cross": "❌",
+    "info": "ℹ️",
+    "rocket": "🚀",
+    "crown": "👑",
+    "shield": "🛡️",
+    "wifi": "📡",
+    "lock": "🔒",
+    "unlock": "🔓",
+    "star": "⭐",
+    "fire": "🔥",
+    "money": "💰",
+    "card": "💎",
+    "phone": "📱",
+    "bank": "🏦",
+    "download": "📥",
+    "upload": "📤",
+    "speed": "⚡",
+    "global": "🌐",
+    "settings": "⚙️"
+}
+
 # --- Взаимодействие с 3X-UI ---
 def xui_login():
     try:
         login_url = f"{PANEL_URL}/{PANEL_PATH}/login"
         r = session.post(login_url, data={"username": PANEL_USER, "password": PANEL_PASS}, verify=False, timeout=10)
-        print(f"[LOGIN] Status: {r.status_code} | Response: {r.text[:200]}...")
         return r.status_code == 200
     except Exception as e:
         print(f"[LOGIN ERROR] {e}")
@@ -57,7 +86,6 @@ def add_user_to_xray(user_uuid, email, days):
     try:
         url = f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/addClient"
         r = session.post(url, json=payload, verify=False, timeout=15)
-        print(f"[ADD CLIENT] Status: {r.status_code} | Response: {r.text[:300]}...")
         response_data = r.json()
         if response_data.get("success"):
             return True
@@ -78,7 +106,6 @@ def delete_user_from_xray(email):
     try:
         url = f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/{INBOUND_ID}/delClient/{email}"
         r = session.post(url, verify=False, timeout=10)
-        print(f"[DEL CLIENT] Status: {r.status_code} | Response: {r.text[:200]}...")
         return r.json().get("success", False)
     except Exception as e:
         print(f"[DEL CLIENT ERROR] {e}")
@@ -90,9 +117,6 @@ def generate_vless_link(u_uuid):
             f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#MAGAMIX_VPN")
 
 def get_remaining_time_str(end_date):
-    # end_date из базы — naive datetime (без tz)
-    # now — aware (с tz)
-    # Приводим end_date к тому же tz
     end_date_aware = MOSCOW_TZ.localize(end_date)
     now_aware = datetime.datetime.now(MOSCOW_TZ)
     delta = end_date_aware - now_aware
@@ -102,6 +126,46 @@ def get_remaining_time_str(end_date):
         return f"{delta.days} дн."
     hours = int(delta.total_seconds() // 3600) + (1 if delta.total_seconds() % 3600 > 0 else 0)
     return f"{hours} ч."
+
+def get_main_menu():
+    """Главное меню"""
+    kb = InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"),
+        InlineKeyboardButton(f"{EMOJI['key']} Мои ключи", callback_data="my_keys")
+    )
+    kb.add(InlineKeyboardButton(f"{EMOJI['support']} Тех. поддержка", url="https://t.me/nejnayatp3"))
+    kb.add(InlineKeyboardButton(f"{EMOJI['info']} Информация", callback_data="info"))
+    return kb
+
+def get_back_button(to="main"):
+    """Кнопка назад"""
+    kb = InlineKeyboardMarkup()
+    kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data=f"back_{to}"))
+    return kb
+
+def get_buy_menu():
+    """Меню покупки с кнопкой назад"""
+    kb = InlineKeyboardMarkup()
+    for k, v in PRICES.items():
+        kb.add(InlineKeyboardButton(
+            f"{EMOJI['card']} {v['name']} — {v['price']}₽", 
+            callback_data=f"plan_{k}"
+        ))
+    kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
+    return kb
+
+def get_instructions_menu(uuid_key=None):
+    """Меню инструкций"""
+    kb = InlineKeyboardMarkup()
+    if uuid_key:
+        kb.add(InlineKeyboardButton(
+            f"{EMOJI['copy']} Скопировать ключ", 
+            callback_data=f"copy_{uuid_key}"
+        ))
+    kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад в Мои ключи", callback_data="my_keys"))
+    kb.add(InlineKeyboardButton(f"{EMOJI['home']} В главное меню", callback_data="main"))
+    return kb
 
 # --- Обработка команд ---
 @bot.message_handler(commands=['start'])
@@ -118,84 +182,131 @@ def start_handler(message):
         if add_user_to_xray(u_uuid, email, 3):
             db.add_key(user_id, u_uuid, SID, 3)
             text = (
-                "Привет! Добро пожаловать в MAGAMIX VPN 🔥\n\n"
-                "🎁 Тебе автоматически выдан бесплатный пробный период на 3 дня!\n"
-                "Ключ уже доступен в разделе «Мои ключи» — просто нажми кнопку ниже.\n\n"
-                "Выбери действие:"
+                f"{EMOJI['crown']} *Добро пожаловать в MAGAMIX VPN* {EMOJI['fire']}\n\n"
+                f"{EMOJI['star']} *Вам выдан БЕСПЛАТНЫЙ пробный период на 3 дня!*\n"
+                f"{EMOJI['key']} Ключ доступен в разделе «Мои ключи»\n\n"
+                f"{EMOJI['rocket']} *Преимущества нашего VPN:*\n"
+                f"• {EMOJI['speed']} Высокая скорость\n"
+                f"• {EMOJI['shield']} Защита данных\n"
+                f"• {EMOJI['global']} Доступ к любому контенту\n"
+                f"• {EMOJI['settings']} Простая настройка\n\n"
+                f"{EMOJI['info']} *Выберите действие ниже:*"
             )
         else:
             text = (
-                "Привет! Добро пожаловать в MAGAMIX VPN 🔥\n\n"
-                "Не удалось выдать пробный период (возможно технические работы).\n"
-                "Напиши в поддержку @nejnayatp3\n\n"
-                "Выбери действие:"
+                f"{EMOJI['crown']} *Добро пожаловать в MAGAMIX VPN* {EMOJI['fire']}\n\n"
+                f"{EMOJI['cross']} *Не удалось выдать пробный период*\n"
+                f"{EMOJI['support']} Свяжитесь с поддержкой: @nejnayatp3\n\n"
+                f"{EMOJI['info']} *Выберите действие ниже:*"
             )
     else:
         text = (
-            "Привет! Рад тебя видеть снова в MAGAMIX VPN 🔥\n\n"
-            "Выбери действие ниже 👇"
+            f"{EMOJI['crown']} *С возвращением в MAGAMIX VPN!* {EMOJI['fire']}\n\n"
+            f"{EMOJI['rocket']} *Ваш VPN активен и готов к работе!*\n"
+            f"{EMOJI['info']} *Выберите действие ниже:*"
         )
-
-    kb = InlineKeyboardMarkup(row_width=2)
-    kb.add(InlineKeyboardButton("💳 Купить VPN", callback_data="buy"),
-           InlineKeyboardButton("🔑 Мои ключи", callback_data="my_keys"))
-    kb.add(InlineKeyboardButton("🆘 Тех. поддержка", url="https://t.me/nejnayatp3"))
     
-    bot.send_message(user_id, text, reply_markup=kb)
+    bot.send_message(user_id, text, reply_markup=get_main_menu(), parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: True)
 def query_handler(call):
     uid = call.from_user.id
     
-    if call.data == "buy":
-        kb = InlineKeyboardMarkup()
-        for k, v in PRICES.items():
-            kb.add(InlineKeyboardButton(f"{v['name']} — {v['price']}₽", callback_data=f"plan_{k}"))
-        bot.edit_message_text("Выберите тариф:", uid, call.message.id, reply_markup=kb)
+    # Обработка кнопки "Назад"
+    if call.data.startswith("back_"):
+        target = call.data.replace("back_", "")
+        if target == "main":
+            text = (
+                f"{EMOJI['crown']} *Главное меню MAGAMIX VPN* {EMOJI['fire']}\n\n"
+                f"{EMOJI['info']} *Выберите действие:*"
+            )
+            bot.edit_message_text(text, uid, call.message.id, 
+                                 reply_markup=get_main_menu(), parse_mode="Markdown")
+        return
+    
+    if call.data == "main":
+        text = (
+            f"{EMOJI['crown']} *Главное меню MAGAMIX VPN* {EMOJI['fire']}\n\n"
+            f"{EMOJI['info']} *Выберите действие:*"
+        )
+        bot.edit_message_text(text, uid, call.message.id, 
+                             reply_markup=get_main_menu(), parse_mode="Markdown")
+    
+    elif call.data == "buy":
+        text = (
+            f"{EMOJI['money']} *Выберите тарифный план* {EMOJI['card']}\n\n"
+            f"{EMOJI['info']} Все тарифы включают:\n"
+            f"• {EMOJI['speed']} Максимальную скорость\n"
+            f"• {EMOJI['shield']} Полную защиту\n"
+            f"• {EMOJI['global']} Неограниченный трафик\n"
+            f"• {EMOJI['settings']} Круглосуточную поддержку\n"
+        )
+        bot.edit_message_text(text, uid, call.message.id, 
+                             reply_markup=get_buy_menu(), parse_mode="Markdown")
     
     elif call.data.startswith("plan_"):
         plan_key = call.data.replace("plan_", "")
         data = PRICES[plan_key]
         db.add_payment(uid, plan_key)
         
-        text = (f"💳 Оплата: {data['name']}\n"
-                f"Сумма: {data['price']}₽\n"
-                f"Банк: {PAY_BANK}\n"
-                f"Номер: `{PAY_PHONE}`\n\n"
-                "Пришлите скриншот чека.")
-        bot.edit_message_text(text, uid, call.message.id, parse_mode="Markdown")
+        text = (
+            f"{EMOJI['card']} *Оплата тарифа: {data['name']}*\n\n"
+            f"{EMOJI['money']} *Сумма к оплате:* {data['price']}₽\n"
+            f"{EMOJI['bank']} *Банк для перевода:* {PAY_BANK}\n"
+            f"{EMOJI['phone']} *Номер для перевода:* `{PAY_PHONE}`\n\n"
+            f"{EMOJI['info']} *Инструкция:*\n"
+            f"1. Переведите {data['price']}₽ на указанный номер\n"
+            f"2. Сохраните чек об оплате\n"
+            f"3. Отправьте скриншот чека в этот чат\n\n"
+            f"{EMOJI['check']} После проверки ключ будет выдан автоматически!"
+        )
+        kb = InlineKeyboardMarkup()
+        kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад к тарифам", callback_data="buy"))
+        kb.add(InlineKeyboardButton(f"{EMOJI['home']} В главное меню", callback_data="main"))
+        
+        bot.edit_message_text(text, uid, call.message.id, 
+                             reply_markup=kb, parse_mode="Markdown")
     
     elif call.data == "my_keys":
         keys = db.get_keys(uid)
         if not keys:
-            bot.edit_message_text("У вас нет активных ключей.", uid, call.message.id)
+            text = f"{EMOJI['key']} *У вас нет активных ключей* {EMOJI['cross']}"
+            kb = get_back_button("main")
+            bot.edit_message_text(text, uid, call.message.id, 
+                                 reply_markup=kb, parse_mode="Markdown")
             return
 
+        # Создаем клавиатуру с ключами
         kb = InlineKeyboardMarkup(row_width=1)
-        msg = "🔑 **Ваши ключи:**\n\n"
-        now = datetime.datetime.now(MOSCOW_TZ)
-
-        for row in keys:
+        
+        for idx, row in enumerate(keys, 1):
             u_uuid = row[1]
-            end_date = row[4]  # naive из базы
-
-            # Приводим end_date к aware
+            end_date = row[4]
+            
             end_date_aware = MOSCOW_TZ.localize(end_date)
-            delta = end_date_aware - now
+            now_aware = datetime.datetime.now(MOSCOW_TZ)
+            delta = end_date_aware - now_aware
+            
             if delta.total_seconds() <= 0:
                 continue
-
+            
             days = delta.days
-            hours = int(delta.total_seconds() // 3600) + (1 if delta.total_seconds() % 3600 else 0)
-            time_str = f"{days} дн." if days >= 1 else f"{hours} ч."
-
-            fake_num = random.randint(100000, 999999)
-            button_text = f"🔐 {fake_num} ({time_str})"
+            remaining = f"{days} дн." if days >= 1 else f"{int(delta.total_seconds() // 3600)} ч."
+            
+            # Создаем красивый текст для кнопки
+            button_text = f"{EMOJI['key']} Ключ #{idx} ({remaining})"
             kb.add(InlineKeyboardButton(button_text, callback_data=f"show_key_{u_uuid}"))
-
-            msg += f"🔐 {fake_num} ({time_str})\n"
-
-        bot.edit_message_text(msg, uid, call.message.id, parse_mode="Markdown", reply_markup=kb)
+        
+        kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
+        kb.add(InlineKeyboardButton(f"{EMOJI['home']} В главное меню", callback_data="main"))
+        
+        text = (
+            f"{EMOJI['key']} *Ваши активные ключи*\n\n"
+            f"{EMOJI['info']} Выберите ключ для просмотра:"
+        )
+        
+        bot.edit_message_text(text, uid, call.message.id, 
+                             reply_markup=kb, parse_mode="Markdown")
     
     elif call.data.startswith("show_key_"):
         u_uuid = call.data.replace("show_key_", "")
@@ -209,34 +320,64 @@ def query_handler(call):
         end_date = datetime.datetime.fromisoformat(end_date_str)
         remaining = get_remaining_time_str(end_date)
         link = generate_vless_link(u_uuid)
+        
+        # Форматируем дату окончания
+        end_date_formatted = end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M') + ' МСК'
 
-        kb = InlineKeyboardMarkup()
-        kb.add(InlineKeyboardButton("📲 Подключиться", callback_data=f"connect_{u_uuid}"))
-
-        text = (f"🔐 Ключ\n"
-                f"Осталось: **{remaining}**\n"
-                f"До: {end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y %H:%M')} МСК\n\n"
-                f"`{link}`\n\n"
-                "Скопируй ссылку выше и вставь в приложение Happ Plus / Hiddify ↓")
-        bot.edit_message_text(text, uid, call.message.id, parse_mode="Markdown", reply_markup=kb)
+        text = (
+            f"{EMOJI['key']} *Детали ключа*\n\n"
+            f"{EMOJI['time']} *Осталось:* **{remaining}**\n"
+            f"{EMOJI['calendar']} *Действует до:* {end_date_formatted}\n\n"
+            f"{EMOJI['link']} *Ссылка подключения:*\n"
+            f"`{link}`\n\n"
+            f"{EMOJI['info']} *Инструкция по настройке:*\n"
+            f"1. Скачайте приложение *Happ Plus* или *Hiddify*\n"
+            f"2. Нажмите «+» → «Импорт из буфера обмена»\n"
+            f"3. Скопируйте ссылку выше и вставьте в приложение\n"
+            f"4. Активируйте подключение и наслаждайтесь! {EMOJI['rocket']}"
+        )
+        
+        bot.edit_message_text(text, uid, call.message.id, 
+                             reply_markup=get_instructions_menu(u_uuid), 
+                             parse_mode="Markdown")
     
-    elif call.data.startswith("connect_"):
-        u_uuid = call.data.replace("connect_", "")
+    elif call.data.startswith("copy_"):
+        u_uuid = call.data.replace("copy_", "")
         link = generate_vless_link(u_uuid)
-
-        app_link = "https://t.me/hiddify_next_bot/app"
-
+        bot.answer_callback_query(call.id, "✅ Ключ скопирован! Вставьте в приложение", show_alert=True)
+    
+    elif call.data == "info":
+        text = (
+            f"{EMOJI['crown']} *MAGAMIX VPN* {EMOJI['fire']}\n\n"
+            f"{EMOJI['rocket']} *Лучший VPN для вашей безопасности и свободы!*\n\n"
+            f"{EMOJI['speed']} *Наши преимущества:*\n"
+            f"• Максимальная скорость подключения\n"
+            f"• Полная анонимность в сети\n"
+            f"• Защита от слежки и хакеров\n"
+            f"• Доступ к заблокированным сайтам\n"
+            f"• Безлимитный трафик\n"
+            f"• Поддержка 24/7\n\n"
+            f"{EMOJI['key']} *Как начать пользоваться:*\n"
+            f"1. Купите подписку в разделе «Купить VPN»\n"
+            f"2. Получите ключ в «Мои ключи»\n"
+            f"3. Настройте приложение за 2 минуты\n"
+            f"4. Наслаждайтесь свободным интернетом!\n\n"
+            f"{EMOJI['support']} *Техническая поддержка:* @nejnayatp3"
+        )
         kb = InlineKeyboardMarkup()
-
-        text = ("1. Скачай приложение **Happ Plus / Hiddify**\n"
-                f"   👉 {app_link}\n\n"
-                "2. В приложении нажми «+» → «Импорт из буфера обмена»\n"
-                "3. Скопируй ключ из сообщения выше и вставь!\n\n"
-                "Готово! Подключись и наслаждайся скоростью 🚀")
-        bot.send_message(uid, text, reply_markup=kb, parse_mode="Markdown")
-        bot.answer_callback_query(call.id, "Ключ скопирован! Вставь в приложение")
-
+        kb.add(InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"))
+        kb.add(InlineKeyboardButton(f"{EMOJI['key']} Мои ключи", callback_data="my_keys"))
+        kb.add(InlineKeyboardButton(f"{EMOJI['support']} Поддержка", url="https://t.me/nejnayatp3"))
+        kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
+        
+        bot.edit_message_text(text, uid, call.message.id, 
+                             reply_markup=kb, parse_mode="Markdown")
+    
     elif call.data.startswith("adm_ok_"):
+        if call.from_user.id != ADMIN_ID:
+            bot.answer_callback_query(call.id, "⛔ Доступ запрещен!")
+            return
+            
         target_id = int(call.data.split("_")[2])
         plan_key = db.get_last_pending_plan(target_id)
         if not plan_key:
@@ -250,20 +391,49 @@ def query_handler(call):
         if add_user_to_xray(u_uuid, email, days):
             db.add_key(target_id, u_uuid, SID, days)
             link = generate_vless_link(u_uuid)
-            bot.send_message(target_id, f"✅ Оплата подтверждена!\nКлюч на {days} дней:\n\n`{link}`\n\nСкопируй и вставь в Happ Plus!", parse_mode="Markdown")
-            bot.edit_message_text(f"Выдано пользователю {target_id}", ADMIN_ID, call.message.id)
+            
+            success_text = (
+                f"{EMOJI['check']} *Оплата подтверждена!*\n\n"
+                f"{EMOJI['key']} *Ваш ключ на {days} дней:*\n"
+                f"`{link}`\n\n"
+                f"{EMOJI['info']} *Инструкция:*\n"
+                f"1. Скопируйте ссылку выше\n"
+                f"2. Откройте Happ Plus / Hiddify\n"
+                f"3. Нажмите «+» → «Импорт из буфера обмена»\n"
+                f"4. Наслаждайтесь VPN! {EMOJI['rocket']}"
+            )
+            
+            bot.send_message(target_id, success_text, parse_mode="Markdown")
+            
+            admin_text = f"{EMOJI['check']} Ключ выдан пользователю {target_id}"
+            bot.edit_message_text(admin_text, ADMIN_ID, call.message.id)
         else:
-            bot.send_message(ADMIN_ID, "❌ Ошибка при связи с API 3X-UI\nПроверь консоль бота!")
+            bot.send_message(ADMIN_ID, f"{EMOJI['cross']} Ошибка при связи с API 3X-UI")
 
 # --- Приём чеков ---
 @bot.message_handler(content_types=['photo'])
 def handle_receipt(message):
     uid = message.from_user.id
-    bot.send_message(uid, "Чек отправлен на проверку. Ожидайте.")
+    bot.send_message(uid, 
+        f"{EMOJI['check']} *Чек принят!*\n\n"
+        f"{EMOJI['time']} Проверка займет несколько минут.\n"
+        f"{EMOJI['info']} После проверки ключ придет автоматически.",
+        parse_mode="Markdown"
+    )
+    
     bot.forward_message(ADMIN_ID, message.chat.id, message.id)
+    
     kb = InlineKeyboardMarkup()
-    kb.add(InlineKeyboardButton("✅ Подтвердить", callback_data=f"adm_ok_{uid}"))
-    bot.send_message(ADMIN_ID, f"Новый чек от ID {uid} (@{message.from_user.username})", reply_markup=kb)
+    kb.add(InlineKeyboardButton(f"{EMOJI['check']} Подтвердить оплату", 
+                               callback_data=f"adm_ok_{uid}"))
+    
+    bot.send_message(ADMIN_ID, 
+        f"{EMOJI['money']} *Новый чек от пользователя*\n\n"
+        f"ID: {uid}\n"
+        f"Username: @{message.from_user.username or 'скрыт'}",
+        reply_markup=kb,
+        parse_mode="Markdown"
+    )
 
 # --- Очистка просроченных ---
 def auto_delete_loop():
@@ -271,14 +441,23 @@ def auto_delete_loop():
         try:
             expired = db.get_all_expired_keys()
             for user_id, u_uuid in expired:
-                deleted = (delete_user_from_xray(f"trial_{user_id}") or 
-                           delete_user_from_xray(f"user_{user_id}"))
-                if deleted:
-                    db.delete_key_by_uuid(u_uuid)
-                    try:
-                        bot.send_message(user_id, "🔴 Ключ истёк и был автоматически удалён.")
-                    except:
-                        pass
+                db.cursor.execute("SELECT * FROM keys WHERE uuid = ?", (u_uuid,))
+                row = db.cursor.fetchone()
+                if row:
+                    email = f"user_{user_id}_{u_uuid[:8]}"
+                    
+                    deleted = delete_user_from_xray(email)
+                    if deleted:
+                        db.delete_key_by_uuid(u_uuid)
+                        try:
+                            bot.send_message(user_id, 
+                                f"{EMOJI['cross']} *Срок действия ключа истек*\n\n"
+                                f"{EMOJI['info']} Ключ был автоматически удален.\n"
+                                f"{EMOJI['buy']} Приобретите новый ключ в разделе «Купить VPN»",
+                                parse_mode="Markdown"
+                            )
+                        except:
+                            pass
         except Exception as e:
             print(f"[CLEANUP ERROR] {e}")
         time.sleep(1800)
@@ -286,5 +465,6 @@ def auto_delete_loop():
 threading.Thread(target=auto_delete_loop, daemon=True).start()
 
 if __name__ == "__main__":
-    print(f"[{datetime.datetime.now(MOSCOW_TZ).strftime('%Y-%m-%d %H:%M:%S %Z')}] Бот запущен...")
+    print(f"{EMOJI['rocket']} Бот запущен в {datetime.datetime.now(MOSCOW_TZ).strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    print(f"{EMOJI['crown']} MAGAMIX VPN готов к работе!")
     bot.infinity_polling()
