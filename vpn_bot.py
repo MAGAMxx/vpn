@@ -506,7 +506,7 @@ def query_handler(call):
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
         
         bot.edit_message_text(text, uid, call.message.id, 
-                             reply_mup=kb, parse_mode="Markdown")
+                             reply_markup=kb, parse_mode="Markdown")
     
     elif call.data == "refresh_stats":
         # Просто обновляем сообщение с ключами
