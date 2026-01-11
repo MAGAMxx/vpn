@@ -8,8 +8,6 @@ import time
 import threading
 import pytz
 import db
-import urllib.parse
-import base64
 from config import *
 
 requests.packages.urllib3.disable_warnings()
@@ -113,6 +111,45 @@ def add_user_to_xray(user_uuid, email, days):
         print(f"[ADD CLIENT ERROR] {e}")
         return False
 
+def update_user_in_xray(email, new_days):
+    """Обновляет срок действия пользователя в Xray"""
+    if not xui_login():
+        return False
+    
+    try:
+        # Сначала получаем текущие настройки пользователя
+        url = f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/get/{INBOUND_ID}"
+        r = session.get(url, verify=False, timeout=10)
+        data = r.json()
+        
+        if not data.get("success"):
+            return False
+        
+        settings = json.loads(data["obj"]["settings"])
+        clients = settings.get("clients", [])
+        
+        # Находим нужного клиента
+        for client in clients:
+            if client.get("email") == email:
+                # Обновляем expiryTime
+                expiry_time = int((time.time() + (new_days * 86400)) * 1000)
+                client["expiryTime"] = expiry_time
+                break
+        
+        # Обновляем настройки
+        payload = {
+            "id": INBOUND_ID,
+            "settings": json.dumps({"clients": clients})
+        }
+        
+        update_url = f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/update/{INBOUND_ID}"
+        r = session.post(update_url, json=payload, verify=False, timeout=15)
+        return r.json().get("success", False)
+        
+    except Exception as e:
+        print(f"[UPDATE CLIENT ERROR] {e}")
+        return False
+
 def delete_user_from_xray(email):
     if not xui_login():
         return False
@@ -124,16 +161,10 @@ def delete_user_from_xray(email):
         print(f"[DEL CLIENT ERROR] {e}")
         return False
 
-def get_client_traffic_stats(email):
-    """Простая заглушка для статистики трафика"""
-    return None, None, 0  # up_gb, down_gb, total_gb
-
 # --- Вспомогательные функции ---
 def generate_vless_link(u_uuid):
-    """Генерация VLESS ссылки"""
     return (f"vless://{u_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality"
-            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F&flow=xtls-rprx-vision"
-            f"#🔥НИДЕРЛАНДЫ 🇳🇱")
+            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#MAGAMIX_VPN")
 
 def get_remaining_time_str(end_date):
     end_date_aware = MOSCOW_TZ.localize(end_date)
@@ -170,6 +201,17 @@ def give_referral_reward(referrer_id, referred_id):
             # Продлеваем существующий ключ на 5 дней
             success = db.extend_key_days(referrer_id, REFERRAL_REWARD_DAYS)
             if success:
+                # Обновляем в Xray
+                uuid_val = active_key[1]
+                email = f"user_{referrer_id}_{uuid_val[:8]}"
+                
+                # Получаем новую дату окончания
+                new_end_date = active_key[4] + datetime.timedelta(days=REFERRAL_REWARD_DAYS)
+                days_until_new_end = (new_end_date - datetime.datetime.now()).days
+                
+                if days_until_new_end > 0:
+                    update_user_in_xray(email, days_until_new_end)
+                
                 # Записываем награду в БД
                 db.add_referral_reward(referrer_id, referred_id, REFERRAL_REWARD_DAYS)
                 
@@ -260,6 +302,31 @@ def get_instructions_menu(uuid_key=None):
     kb.add(InlineKeyboardButton(f"{EMOJI['home']} В главное меню", callback_data="main"))
     return kb
 
+def get_referral_menu(user_id):
+    """Меню реферальной системы"""
+    kb = InlineKeyboardMarkup(row_width=1)
+    
+    # Генерируем реферальную ссылку
+    ref_link = generate_referral_link(user_id)
+    
+    # Получаем статистику
+    ref_stats = db.get_referrals_stats(user_id)
+    
+    kb.add(InlineKeyboardButton(
+        f"{EMOJI['invite']} Скопировать ссылку", 
+        callback_data=f"copy_ref_{user_id}"
+    ))
+    
+    kb.add(InlineKeyboardButton(
+        f"{EMOJI['stats']} Моя статистика", 
+        callback_data="ref_stats"
+    ))
+    
+    kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
+    kb.add(InlineKeyboardButton(f"{EMOJI['home']} В главное меню", callback_data="main"))
+    
+    return kb, ref_link, ref_stats
+
 # --- Обработка команд ---
 @bot.message_handler(commands=['start'])
 def start_handler(message):
@@ -288,6 +355,7 @@ def start_handler(message):
         if not success:
             print(f"Не удалось выдать награду рефереру {referrer_id}")
     
+    user_keys = db.get_keys(user_id)
     active_key = db.get_active_key(user_id)
     
     if not active_key:  # Первый раз — триал
@@ -384,6 +452,7 @@ def query_handler(call):
                              reply_markup=kb, parse_mode="Markdown")
     
     elif call.data == "my_keys":
+        keys = db.get_keys(uid)
         active_key = db.get_active_key(uid)
         
         if not active_key:
@@ -418,7 +487,7 @@ def query_handler(call):
         text = (
             f"{EMOJI['key']} *Ваш активный ключ*\n\n"
             f"{EMOJI['time']} *Осталось:* **{remaining}**\n"
-            f" *Действует до:* {end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M')} МСК\n\n"
+            f"*Действует до:* {end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M')} МСК\n\n"
             f"{EMOJI['info']} *Что дальше?*"
         )
         
@@ -441,11 +510,9 @@ def query_handler(call):
             bot.answer_callback_query(call.id, "Ключ не найден")
             return
 
-        end_date_str = row[0]
+        end_date_str = str(row[0])
         end_date = datetime.datetime.fromisoformat(end_date_str)
         remaining = get_remaining_time_str(end_date)
-        
-        # Генерируем ссылку
         link = generate_vless_link(u_uuid)
         
         # Форматируем дату окончания
@@ -458,7 +525,7 @@ def query_handler(call):
             f"{EMOJI['link']} *Ссылка подключения:*\n"
             f"`{link}`\n\n"
             f"{EMOJI['info']} *Инструкция по настройке:*\n"
-            f"1. Скачайте приложение *Happ Plus* \n"
+            f"1. Скачайте приложение *Happ Plus* или *Hiddify*\n"
             f"2. Нажмите «+» → «Импорт из буфера обмена»\n"
             f"3. Скопируйте ссылку выше и вставьте в приложение\n"
             f"4. Активируйте подключение и наслаждайтесь! {EMOJI['rocket']}"
@@ -468,7 +535,7 @@ def query_handler(call):
                              reply_markup=get_instructions_menu(u_uuid), 
                              parse_mode="Markdown")
     
-    elif call.data.startswith("copy_"): 
+    elif call.data.startswith("copy_"):
         if call.data.startswith("copy_ref_"):
             user_id = int(call.data.replace("copy_ref_", ""))
             ref_link = generate_referral_link(user_id)
@@ -482,19 +549,7 @@ def query_handler(call):
             bot.answer_callback_query(call.id, "✅ Ключ скопирован! Вставьте в приложение", show_alert=True)
     
     elif call.data == "referral":
-        ref_link = generate_referral_link(uid)
-        ref_stats = db.get_referrals_stats(uid)
-        
-        kb = InlineKeyboardMarkup(row_width=1)
-        kb.add(InlineKeyboardButton(
-            f"{EMOJI['invite']} Скопировать ссылку", 
-            callback_data=f"copy_ref_{uid}"
-        ))
-        kb.add(InlineKeyboardButton(
-            f"{EMOJI['stats']} Моя статистика", 
-            callback_data="ref_stats"
-        ))
-        kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
+        kb, ref_link, ref_stats = get_referral_menu(uid)
         
         text = (
             f"{EMOJI['friends']} *Пригласите друга — получите бонус!* {EMOJI['gift']}\n\n"
@@ -620,7 +675,7 @@ def handle_receipt(message):
     bot.forward_message(ADMIN_ID, message.chat.id, message.id)
     
     kb = InlineKeyboardMarkup()
-    kb.add(InlineKeyboardButton(f"{EMOJI['check']} Подтвердить оплата", 
+    kb.add(InlineKeyboardButton(f"{EMOJI['check']} Подтвердить оплату", 
                                callback_data=f"adm_ok_{uid}"))
     
     bot.send_message(ADMIN_ID, 
