@@ -2,13 +2,18 @@
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import uuid, random
-from datetime import datetime
+from datetime import datetime, timedelta
+import requests
 from db import add_key, get_active_keys, extend_key, cleanup_expired_keys
 from config import BOT_TOKEN, ADMIN_ID, PAY_PHONE, PAY_BANK, PRICES, SERVER_IP, SERVER_PORT, PBK, FP, SNI, XRAY_API_URL, XRAY_API_TOKEN
 
 bot = telebot.TeleBot(BOT_TOKEN)
 user_orders = {}
 SHORT_IDS = ["8b","87c72e","a55e4a67","082b0cc04005","93281c7c7dcc2a81","15518f9d8686e6","c2f8","37de7da930"]
+
+HEADERS = {"Content-Type": "application/json"}
+if XRAY_API_TOKEN:
+    HEADERS["Authorization"] = f"Bearer {XRAY_API_TOKEN}"
 
 def main_menu():
     kb = InlineKeyboardMarkup()
@@ -17,17 +22,66 @@ def main_menu():
     kb.add(InlineKeyboardButton("🔑 Мои ключи", callback_data="mykeys"))
     return kb
 
-def create_vless_link(telegram_id):
+# Создание клиента через API Xray
+def create_vless_link(telegram_id, plan_days):
     user_uuid = str(uuid.uuid4())
     sid = random.choice(SHORT_IDS)
 
-    # Автосоздание на Xray через API
-    # TODO: вставить реальный API запрос
-    print(f"[INFO] Создан клиент для {telegram_id} UUID={user_uuid} SID={sid}")
+    # Реальный POST запрос к Xray API
+    payload = {
+        "add": [
+            {
+                "email": user_uuid,
+                "level": 0,
+                "flow": "",
+                "alterId": 0,
+                "security": "reality",
+                "shortIds": [sid],
+                "expiry": plan_days  # дни
+            }
+        ]
+    }
+    try:
+        url = f"{XRAY_API_URL}/v1/clients"
+        resp = requests.post(url, json=payload, headers=HEADERS, timeout=5)
+        if resp.status_code == 200:
+            print(f"[INFO] Клиент создан на Xray: {user_uuid}")
+        else:
+            print(f"[ERROR] Xray API: {resp.status_code}, {resp.text}")
+    except Exception as e:
+        print(f"[ERROR] Не удалось создать клиента на Xray: {e}")
 
-    add_key(telegram_id, user_uuid, sid, "manual", 30)
+    add_key(telegram_id, user_uuid, sid, "manual", plan_days)
     return f"vless://{user_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality&pbk={PBK}&fp={FP}&sni={SNI}&sid={sid}&spx=%2F#MAGAMIX-{telegram_id}"
 
+# Удаление клиента с Xray через API
+def delete_xray_user(user_uuid):
+    try:
+        url = f"{XRAY_API_URL}/v1/clients/{user_uuid}"
+        resp = requests.delete(url, headers=HEADERS, timeout=5)
+        if resp.status_code == 200:
+            print(f"[INFO] Клиент удалён с Xray: {user_uuid}")
+        else:
+            print(f"[ERROR] Не удалось удалить клиента Xray: {resp.status_code} {resp.text}")
+    except Exception as e:
+        print(f"[ERROR] Исключение при удалении клиента Xray: {e}")
+
+# Очистка просроченных ключей
+def cleanup_expired_keys_full():
+    now = datetime.utcnow().isoformat()
+    import sqlite3
+    conn = sqlite3.connect("vpn.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, uuid FROM keys WHERE end_date<?", (now,))
+    rows = cursor.fetchall()
+    for key_id, uuid_key in rows:
+        delete_xray_user(uuid_key)
+        cursor.execute("DELETE FROM keys WHERE id=?", (key_id,))
+        print(f"[INFO] Удалён ключ {uuid_key}")
+    conn.commit()
+    conn.close()
+
+# --- Бот ---
 @bot.message_handler(commands=['start'])
 def start_handler(message):
     bot.send_message(message.chat.id,
@@ -88,6 +142,15 @@ def handle_check(message):
         bot.forward_message(ADMIN_ID, message.chat.id, message.message_id)
     bot.reply_to(message, "⏳ Чек отправлен на проверку")
     print(f"[INFO] Пользователь @{message.from_user.username} прислал чек для {data['name']}")
+
+# --- Автоочистка ключей каждые 10 минут ---
+import threading, time
+def auto_cleanup_loop():
+    while True:
+        cleanup_expired_keys_full()
+        time.sleep(600)  # 10 минут
+
+threading.Thread(target=auto_cleanup_loop, daemon=True).start()
 
 print("[INFO] Бот запущен...")
 bot.infinity_polling()
