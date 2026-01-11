@@ -164,7 +164,7 @@ def delete_user_from_xray(email):
 # --- Вспомогательные функции ---
 def generate_vless_link(u_uuid):
     return (f"vless://{u_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality"
-            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#MAGAMIX_VPN")
+            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#⚡MAGAMIX_VPN | НИДЕРЛАНДЫ ")
 
 def get_remaining_time_str(end_date):
     end_date_aware = MOSCOW_TZ.localize(end_date)
