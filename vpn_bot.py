@@ -46,8 +46,19 @@ EMOJI = {
     "upload": "📤",
     "speed": "⚡",
     "global": "🌐",
-    "settings": "⚙️"
+    "settings": "⚙️",
+    "friends": "👥",
+    "gift": "🎁",
+    "invite": "📨",
+    "stats": "📊",
+    "trophy": "🏆",
+    "medal": "🏅",
+    "party": "🎉",
+    "diamond": "💎"
 }
+
+# Реферальная система
+REFERRAL_REWARD_DAYS = 5  # +5 дней за каждого друга
 
 # --- Взаимодействие с 3X-UI ---
 def xui_login():
@@ -100,6 +111,45 @@ def add_user_to_xray(user_uuid, email, days):
         print(f"[ADD CLIENT ERROR] {e}")
         return False
 
+def update_user_in_xray(email, new_days):
+    """Обновляет срок действия пользователя в Xray"""
+    if not xui_login():
+        return False
+    
+    try:
+        # Сначала получаем текущие настройки пользователя
+        url = f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/get/{INBOUND_ID}"
+        r = session.get(url, verify=False, timeout=10)
+        data = r.json()
+        
+        if not data.get("success"):
+            return False
+        
+        settings = json.loads(data["obj"]["settings"])
+        clients = settings.get("clients", [])
+        
+        # Находим нужного клиента
+        for client in clients:
+            if client.get("email") == email:
+                # Обновляем expiryTime
+                expiry_time = int((time.time() + (new_days * 86400)) * 1000)
+                client["expiryTime"] = expiry_time
+                break
+        
+        # Обновляем настройки
+        payload = {
+            "id": INBOUND_ID,
+            "settings": json.dumps({"clients": clients})
+        }
+        
+        update_url = f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/update/{INBOUND_ID}"
+        r = session.post(update_url, json=payload, verify=False, timeout=15)
+        return r.json().get("success", False)
+        
+    except Exception as e:
+        print(f"[UPDATE CLIENT ERROR] {e}")
+        return False
+
 def delete_user_from_xray(email):
     if not xui_login():
         return False
@@ -127,6 +177,88 @@ def get_remaining_time_str(end_date):
     hours = int(delta.total_seconds() // 3600) + (1 if delta.total_seconds() % 3600 > 0 else 0)
     return f"{hours} ч."
 
+def generate_referral_link(user_id):
+    """Генерирует реферальную ссылку"""
+    return f"https://t.me/{bot.get_me().username}?start=ref{user_id}"
+
+def give_referral_reward(referrer_id, referred_id):
+    """Выдает награду за реферала"""
+    try:
+        # Проверяем, не выдавалась ли уже награда
+        db.cursor.execute("""
+            SELECT reward_given FROM referrals 
+            WHERE referrer_id = ? AND referred_id = ?
+        """, (referrer_id, referred_id))
+        
+        row = db.cursor.fetchone()
+        if row and row[0] == 1:
+            return False  # Награда уже выдана
+        
+        # Получаем активный ключ реферера
+        active_key = db.get_active_key(referrer_id)
+        
+        if active_key:
+            # Продлеваем существующий ключ на 5 дней
+            success = db.extend_key_days(referrer_id, REFERRAL_REWARD_DAYS)
+            if success:
+                # Обновляем в Xray
+                uuid_val = active_key[1]
+                email = f"user_{referrer_id}_{uuid_val[:8]}"
+                
+                # Получаем новую дату окончания
+                new_end_date = active_key[4] + datetime.timedelta(days=REFERRAL_REWARD_DAYS)
+                days_until_new_end = (new_end_date - datetime.datetime.now()).days
+                
+                if days_until_new_end > 0:
+                    update_user_in_xray(email, days_until_new_end)
+                
+                # Записываем награду в БД
+                db.add_referral_reward(referrer_id, referred_id, REFERRAL_REWARD_DAYS)
+                
+                # Отправляем уведомление рефереру
+                try:
+                    bot.send_message(
+                        referrer_id,
+                        f"{EMOJI['party']} *Бонус за друга!*\n\n"
+                        f"{EMOJI['gift']} Ваш активный ключ продлен на *+{REFERRAL_REWARD_DAYS} дней*!\n"
+                        f"{EMOJI['friends']} Ваш друг успешно зарегистрировался по вашей ссылке.\n\n"
+                        f"{EMOJI['trophy']} Приглашайте больше друзей и получайте бонусы!",
+                        parse_mode="Markdown"
+                    )
+                except:
+                    pass
+                
+                return True
+        else:
+            # Создаем новый ключ на 5 дней
+            u_uuid = str(uuid.uuid4())
+            email = f"ref_{referrer_id}_{int(time.time())}"
+            
+            if add_user_to_xray(u_uuid, email, REFERRAL_REWARD_DAYS):
+                db.add_key(referrer_id, u_uuid, SID, REFERRAL_REWARD_DAYS)
+                db.add_referral_reward(referrer_id, referred_id, REFERRAL_REWARD_DAYS)
+                
+                # Отправляем уведомление рефереру
+                try:
+                    bot.send_message(
+                        referrer_id,
+                        f"{EMOJI['party']} *Бонус за друга!*\n\n"
+                        f"{EMOJI['gift']} Вам выдан новый ключ на *{REFERRAL_REWARD_DAYS} дней*!\n"
+                        f"{EMOJI['friends']} Ваш друг успешно зарегистрировался по вашей ссылке.\n"
+                        f"{EMOJI['key']} Ключ доступен в разделе «Мои ключи»\n\n"
+                        f"{EMOJI['trophy']} Приглашайте больше друзей и получайте бонусы!",
+                        parse_mode="Markdown"
+                    )
+                except:
+                    pass
+                
+                return True
+        
+        return False
+    except Exception as e:
+        print(f"[REFERRAL REWARD ERROR] {e}")
+        return False
+
 def get_main_menu():
     """Главное меню"""
     kb = InlineKeyboardMarkup(row_width=2)
@@ -134,7 +266,10 @@ def get_main_menu():
         InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"),
         InlineKeyboardButton(f"{EMOJI['key']} Мои ключи", callback_data="my_keys")
     )
-    kb.add(InlineKeyboardButton(f"{EMOJI['support']} Тех. поддержка", url="https://t.me/nejnayatp3"))
+    kb.add(
+        InlineKeyboardButton(f"{EMOJI['friends']} Пригласить друга", callback_data="referral"),
+        InlineKeyboardButton(f"{EMOJI['support']} Поддержка", url="https://t.me/nejnayatp3")
+    )
     kb.add(InlineKeyboardButton(f"{EMOJI['info']} Информация", callback_data="info"))
     return kb
 
@@ -167,15 +302,63 @@ def get_instructions_menu(uuid_key=None):
     kb.add(InlineKeyboardButton(f"{EMOJI['home']} В главное меню", callback_data="main"))
     return kb
 
+def get_referral_menu(user_id):
+    """Меню реферальной системы"""
+    kb = InlineKeyboardMarkup(row_width=1)
+    
+    # Генерируем реферальную ссылку
+    ref_link = generate_referral_link(user_id)
+    
+    # Получаем статистику
+    ref_stats = db.get_referrals_stats(user_id)
+    
+    kb.add(InlineKeyboardButton(
+        f"{EMOJI['invite']} Скопировать ссылку", 
+        callback_data=f"copy_ref_{user_id}"
+    ))
+    
+    kb.add(InlineKeyboardButton(
+        f"{EMOJI['stats']} Моя статистика", 
+        callback_data="ref_stats"
+    ))
+    
+    kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
+    kb.add(InlineKeyboardButton(f"{EMOJI['home']} В главное меню", callback_data="main"))
+    
+    return kb, ref_link, ref_stats
+
 # --- Обработка команд ---
 @bot.message_handler(commands=['start'])
 def start_handler(message):
     user_id = message.from_user.id
-    db.add_user(user_id, message.from_user.username)
+    username = message.from_user.username
+    
+    # Проверяем, есть ли реферальный код в команде
+    referrer_id = None
+    if len(message.text.split()) > 1:
+        ref_code = message.text.split()[1]
+        if ref_code.startswith('ref'):
+            try:
+                referrer_id = int(ref_code[3:])  # Убираем 'ref' в начале
+                # Проверяем, что реферер существует и это не сам пользователь
+                if referrer_id == user_id:
+                    referrer_id = None
+            except:
+                referrer_id = None
+    
+    # Регистрируем пользователя
+    is_new_user = db.add_user(user_id, username, referrer_id)
+    
+    if is_new_user and referrer_id:
+        # Если это новый пользователь и есть реферер, выдаем награду
+        success = give_referral_reward(referrer_id, user_id)
+        if not success:
+            print(f"Не удалось выдать награду рефереру {referrer_id}")
     
     user_keys = db.get_keys(user_id)
+    active_key = db.get_active_key(user_id)
     
-    if not user_keys:  # Первый раз — триал
+    if not active_key:  # Первый раз — триал
         u_uuid = str(uuid.uuid4())
         email = f"trial_{user_id}_{int(time.time())}"
         
@@ -185,11 +368,10 @@ def start_handler(message):
                 f"{EMOJI['crown']} *Добро пожаловать в MAGAMIX VPN* {EMOJI['fire']}\n\n"
                 f"{EMOJI['star']} *Вам выдан БЕСПЛАТНЫЙ пробный период на 3 дня!*\n"
                 f"{EMOJI['key']} Ключ доступен в разделе «Мои ключи»\n\n"
-                f"{EMOJI['rocket']} *Преимущества нашего VPN:*\n"
-                f"• {EMOJI['speed']} Высокая скорость\n"
-                f"• {EMOJI['shield']} Защита данных\n"
-                f"• {EMOJI['global']} Доступ к любому контенту\n"
-                f"• {EMOJI['settings']} Простая настройка\n\n"
+                f"{EMOJI['gift']} *Бонусная программа:*\n"
+                f"• Пригласите друга → получите +{REFERRAL_REWARD_DAYS} дней\n"
+                f"• Нет ключа? Создастся новый на {REFERRAL_REWARD_DAYS} дней\n"
+                f"• Есть ключ? Он продлится на {REFERRAL_REWARD_DAYS} дней\n\n"
                 f"{EMOJI['info']} *Выберите действие ниже:*"
             )
         else:
@@ -203,6 +385,8 @@ def start_handler(message):
         text = (
             f"{EMOJI['crown']} *С возвращением в MAGAMIX VPN!* {EMOJI['fire']}\n\n"
             f"{EMOJI['rocket']} *Ваш VPN активен и готов к работе!*\n"
+            f"{EMOJI['gift']} *Не забывайте про реферальную программу!*\n"
+            f"Приглашайте друзей и получайте бонусы {EMOJI['diamond']}\n\n"
             f"{EMOJI['info']} *Выберите действие ниже:*"
         )
     
@@ -269,41 +453,51 @@ def query_handler(call):
     
     elif call.data == "my_keys":
         keys = db.get_keys(uid)
-        if not keys:
+        active_key = db.get_active_key(uid)
+        
+        if not active_key:
             text = f"{EMOJI['key']} *У вас нет активных ключей* {EMOJI['cross']}"
-            kb = get_back_button("main")
+            kb = InlineKeyboardMarkup()
+            kb.add(InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"))
+            kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
             bot.edit_message_text(text, uid, call.message.id, 
                                  reply_markup=kb, parse_mode="Markdown")
             return
 
-        # Создаем клавиатуру с ключами
-        kb = InlineKeyboardMarkup(row_width=1)
+        # Показываем только активный ключ
+        u_uuid = active_key[1]
+        end_date = active_key[4]
         
-        for idx, row in enumerate(keys, 1):
-            u_uuid = row[1]
-            end_date = row[4]
-            
-            end_date_aware = MOSCOW_TZ.localize(end_date)
-            now_aware = datetime.datetime.now(MOSCOW_TZ)
-            delta = end_date_aware - now_aware
-            
-            if delta.total_seconds() <= 0:
-                continue
-            
-            days = delta.days
-            remaining = f"{days} дн." if days >= 1 else f"{int(delta.total_seconds() // 3600)} ч."
-            
-            # Создаем красивый текст для кнопки
-            button_text = f"{EMOJI['key']} Ключ #{idx} ({remaining})"
-            kb.add(InlineKeyboardButton(button_text, callback_data=f"show_key_{u_uuid}"))
+        end_date_aware = MOSCOW_TZ.localize(end_date)
+        now_aware = datetime.datetime.now(MOSCOW_TZ)
+        delta = end_date_aware - now_aware
         
-        kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
-        kb.add(InlineKeyboardButton(f"{EMOJI['home']} В главное меню", callback_data="main"))
+        if delta.total_seconds() <= 0:
+            text = f"{EMOJI['key']} *Ваш ключ истек* {EMOJI['cross']}"
+            kb = InlineKeyboardMarkup()
+            kb.add(InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"))
+            kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
+            bot.edit_message_text(text, uid, call.message.id, 
+                                 reply_markup=kb, parse_mode="Markdown")
+            return
+        
+        days = delta.days
+        remaining = f"{days} дн." if days >= 1 else f"{int(delta.total_seconds() // 3600)} ч."
         
         text = (
-            f"{EMOJI['key']} *Ваши активные ключи*\n\n"
-            f"{EMOJI['info']} Выберите ключ для просмотра:"
+            f"{EMOJI['key']} *Ваш активный ключ*\n\n"
+            f"{EMOJI['time']} *Осталось:* **{remaining}**\n"
+            f"{EMOJI['calendar']} *Действует до:* {end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M')} МСК\n\n"
+            f"{EMOJI['info']} *Что дальше?*"
         )
+        
+        kb = InlineKeyboardMarkup()
+        kb.add(InlineKeyboardButton(
+            f"{EMOJI['copy']} Получить ссылку подключения", 
+            callback_data=f"show_key_{u_uuid}"
+        ))
+        kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
+        kb.add(InlineKeyboardButton(f"{EMOJI['home']} В главное меню", callback_data="main"))
         
         bot.edit_message_text(text, uid, call.message.id, 
                              reply_markup=kb, parse_mode="Markdown")
@@ -342,9 +536,62 @@ def query_handler(call):
                              parse_mode="Markdown")
     
     elif call.data.startswith("copy_"):
-        u_uuid = call.data.replace("copy_", "")
-        link = generate_vless_link(u_uuid)
-        bot.answer_callback_query(call.id, "✅ Ключ скопирован! Вставьте в приложение", show_alert=True)
+        if call.data.startswith("copy_ref_"):
+            user_id = int(call.data.replace("copy_ref_", ""))
+            ref_link = generate_referral_link(user_id)
+            bot.answer_callback_query(call.id, 
+                f"✅ Реферальная ссылка скопирована!\n\n{ref_link}", 
+                show_alert=True
+            )
+        else:
+            u_uuid = call.data.replace("copy_", "")
+            link = generate_vless_link(u_uuid)
+            bot.answer_callback_query(call.id, "✅ Ключ скопирован! Вставьте в приложение", show_alert=True)
+    
+    elif call.data == "referral":
+        kb, ref_link, ref_stats = get_referral_menu(uid)
+        
+        text = (
+            f"{EMOJI['friends']} *Пригласите друга — получите бонус!* {EMOJI['gift']}\n\n"
+            f"{EMOJI['trophy']} *Как это работает:*\n"
+            f"1. Отправьте другу вашу реферальную ссылку\n"
+            f"2. Друг должен нажать на ссылку и зарегистрироваться\n"
+            f"3. Вы автоматически получаете *+{REFERRAL_REWARD_DAYS} дней VPN*\n\n"
+            f"{EMOJI['info']} *Условия:*\n"
+            f"• Если у вас есть активный ключ — он продлится\n"
+            f"• Если ключа нет — создастся новый на {REFERRAL_REWARD_DAYS} дней\n"
+            f"• Бонус начисляется за каждого нового пользователя\n\n"
+            f"{EMOJI['stats']} *Ваша статистика:*\n"
+            f"• Всего приглашено: *{ref_stats['total']}*\n"
+            f"• Получено бонусов: *{ref_stats['rewarded']}*\n"
+            f"• Всего дней бонусов: *{ref_stats['rewarded'] * REFERRAL_REWARD_DAYS}*\n\n"
+            f"{EMOJI['link']} *Ваша реферальная ссылка:*\n"
+            f"`{ref_link}`\n\n"
+            f"{EMOJI['party']} Приглашайте друзей и пользуйтесь VPN бесплатно!"
+        )
+        
+        bot.edit_message_text(text, uid, call.message.id, 
+                             reply_markup=kb, parse_mode="Markdown")
+    
+    elif call.data == "ref_stats":
+        ref_stats = db.get_referrals_stats(uid)
+        
+        text = (
+            f"{EMOJI['stats']} *Ваша реферальная статистика*\n\n"
+            f"{EMOJI['friends']} *Всего приглашено друзей:* {ref_stats['total']}\n"
+            f"{EMOJI['check']} *Получено бонусов:* {ref_stats['rewarded']}\n"
+            f"{EMOJI['gift']} *Всего дней бонусов:* {ref_stats['rewarded'] * REFERRAL_REWARD_DAYS}\n\n"
+            f"{EMOJI['trophy']} *Приглашайте больше друзей!*\n"
+            f"Каждый новый друг = +{REFERRAL_REWARD_DAYS} дней VPN\n\n"
+            f"{EMOJI['diamond']} Чем больше друзей, тем дольше VPN!"
+        )
+        
+        kb = InlineKeyboardMarkup()
+        kb.add(InlineKeyboardButton(f"{EMOJI['friends']} Вернуться к рефералке", callback_data="referral"))
+        kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
+        
+        bot.edit_message_text(text, uid, call.message.id, 
+                             reply_markup=kb, parse_mode="Markdown")
     
     elif call.data == "info":
         text = (
@@ -357,6 +604,10 @@ def query_handler(call):
             f"• Доступ к заблокированным сайтам\n"
             f"• Безлимитный трафик\n"
             f"• Поддержка 24/7\n\n"
+            f"{EMOJI['gift']} *Реферальная программа:*\n"
+            f"• Пригласите друга → получите +{REFERRAL_REWARD_DAYS} дней\n"
+            f"• Нет ключа? Создастся новый на {REFERRAL_REWARD_DAYS} дней\n"
+            f"• Есть ключ? Он продлится на {REFERRAL_REWARD_DAYS} дней\n\n"
             f"{EMOJI['key']} *Как начать пользоваться:*\n"
             f"1. Купите подписку в разделе «Купить VPN»\n"
             f"2. Получите ключ в «Мои ключи»\n"
@@ -366,7 +617,7 @@ def query_handler(call):
         )
         kb = InlineKeyboardMarkup()
         kb.add(InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"))
-        kb.add(InlineKeyboardButton(f"{EMOJI['key']} Мои ключи", callback_data="my_keys"))
+        kb.add(InlineKeyboardButton(f"{EMOJI['friends']} Пригласить друга", callback_data="referral"))
         kb.add(InlineKeyboardButton(f"{EMOJI['support']} Поддержка", url="https://t.me/nejnayatp3"))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
         
@@ -453,7 +704,8 @@ def auto_delete_loop():
                             bot.send_message(user_id, 
                                 f"{EMOJI['cross']} *Срок действия ключа истек*\n\n"
                                 f"{EMOJI['info']} Ключ был автоматически удален.\n"
-                                f"{EMOJI['buy']} Приобретите новый ключ в разделе «Купить VPN»",
+                                f"{EMOJI['buy']} Приобретите новый ключ в разделе «Купить VPN»\n"
+                                f"{EMOJI['friends']} Или пригласите друга и получите +{REFERRAL_REWARD_DAYS} дней!",
                                 parse_mode="Markdown"
                             )
                         except:
@@ -467,4 +719,5 @@ threading.Thread(target=auto_delete_loop, daemon=True).start()
 if __name__ == "__main__":
     print(f"{EMOJI['rocket']} Бот запущен в {datetime.datetime.now(MOSCOW_TZ).strftime('%Y-%m-%d %H:%M:%S %Z')}")
     print(f"{EMOJI['crown']} MAGAMIX VPN готов к работе!")
+    print(f"{EMOJI['gift']} Реферальная система активна: +{REFERRAL_REWARD_DAYS} дней за друга")
     bot.infinity_polling()
