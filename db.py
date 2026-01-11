@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS keys (
     start_date TEXT,
     end_date TEXT,
     is_active INTEGER DEFAULT 1,
-    email TEXT,  # ДОБАВЛЕНО ПОЛЕ EMAIL
+    email TEXT,
     FOREIGN KEY (user_id) REFERENCES users(id)
 )
 ''')
@@ -79,7 +79,7 @@ def add_user(uid, username, referrer_id=None):
     conn.commit()
     return cursor.rowcount > 0
 
-def add_key(user_id, u_uuid, sid, days, email):  # ИЗМЕНЕНО: добавлен email
+def add_key(user_id, u_uuid, sid, days, email):
     """Добавляем ключ с датами в формате ISO строки"""
     start_date = datetime.datetime.now().isoformat()
     end_date = (datetime.datetime.now() + datetime.timedelta(days=days)).isoformat()
@@ -179,16 +179,6 @@ def extend_key_days(user_id, days_to_add):
         print(f"Ошибка при продлении ключа: {e}")
         return False
 
-def create_key_if_none(user_id, u_uuid, sid, days):
-    """Создает новый ключ, если у пользователя нет активного"""
-    active_key = get_active_key(user_id)
-    if not active_key:
-        # Нужно передать email тоже, но его нет в этой функции
-        # Создаем базовый email
-        email = f"user_{user_id}_{u_uuid[:8]}"
-        return add_key(user_id, u_uuid, sid, days, email)
-    return False  # Ключ уже есть
-
 def add_referral_reward(referrer_id, referred_id, days_added):
     """Добавляет запись о награде за реферала"""
     cursor.execute("""
@@ -204,14 +194,6 @@ def add_referral_reward(referrer_id, referred_id, days_added):
     """, (referrer_id, referred_id))
     
     conn.commit()
-
-def get_referrals_count(user_id):
-    """Получает количество рефералов пользователя"""
-    cursor.execute("""
-        SELECT COUNT(*) FROM referrals 
-        WHERE referrer_id = ? AND reward_given = 1
-    """, (user_id,))
-    return cursor.fetchone()[0]
 
 def get_referrals_stats(user_id):
     """Получает статистику по рефералам"""
