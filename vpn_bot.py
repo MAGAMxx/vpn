@@ -19,14 +19,14 @@ RENDER_URL = "https://magamix.onrender.com" # ← измени, если subdoma
 SUB_PATH = "/sub/"
 # Emoji для оформления
 EMOJI = {
-    "home": "🏠", "back": "↩️", "key": "🔑", "buy": "💳", "support": "🆘",
-    "time": "⏰", "link": "🔗", "copy": "📋", "check": "✅", "cross": "❌",
-    "info": "ℹ️", "rocket": "🚀", "crown": "👑", "shield": "🛡️", "wifi": "📡",
-    "lock": "🔒", "unlock": "🔓", "star": "⭐", "fire": "🔥", "money": "💰",
-    "card": "💎", "phone": "📱", "bank": "🏦", "download": "📥", "upload": "📤",
-    "speed": "⚡", "global": "🌐", "settings": "⚙️", "friends": "👥", "gift": "🎁",
-    "invite": "📨", "stats": "📊", "trophy": "🏆", "medal": "🏅", "party": "🎉",
-    "diamond": "💎"
+    "home": "🏠", "back": "↩️", "key": "🔑", "buy": "💳", "support": "🆘",
+    "time": "⏰", "link": "🔗", "copy": "📋", "check": "✅", "cross": "❌",
+    "info": "ℹ️", "rocket": "🚀", "crown": "👑", "shield": "🛡️", "wifi": "📡",
+    "lock": "🔒", "unlock": "🔓", "star": "⭐", "fire": "🔥", "money": "💰",
+    "card": "💎", "phone": "📱", "bank": "🏦", "download": "📥", "upload": "📤",
+    "speed": "⚡", "global": "🌐", "settings": "⚙️", "friends": "👥", "gift": "🎁",
+    "invite": "📨", "stats": "📊", "trophy": "🏆", "medal": "🏅", "party": "🎉",
+    "diamond": "💎"
 }
 # Реферальная система
 REFERRAL_REWARD_DAYS = 5 # +5 дней за каждого друга
