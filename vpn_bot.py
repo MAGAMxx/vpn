@@ -255,9 +255,8 @@ def get_main_menu():
     return kb
 
 def get_back_button(to="main"):
-    """Кнопка назад"""
     kb = InlineKeyboardMarkup()
-    kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data=f"back*{to}"))
+    kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data=f"back_{to}"))  # ← без *
     return kb
 
 def get_buy_menu():
@@ -359,7 +358,7 @@ def query_handler(call):
     uid = call.from_user.id
     
     # Обработка кнопки "Назад"
-    if call.data.startswith("back*"):
+    if call.data.startswith("back_"):
         target = call.data.replace("back_", "")
         if target == "main":
             text = (
