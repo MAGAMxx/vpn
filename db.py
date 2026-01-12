@@ -280,25 +280,6 @@ def get_active_keys_count():
         print(f"[DB ERROR get_active_keys_count] {e}")
         return 0
 
-def get_user_payments_sum(user_id):
-    """Возвращает сумму покупок пользователя"""
-    try:
-        cursor.execute("""
-            SELECT plan_key, COUNT(*) as count 
-            FROM payments 
-            WHERE user_id = ? AND status = 'confirmed'
-            GROUP BY plan_key
-        """, (user_id,))
-        
-        total = 0
-        rows = cursor.fetchall()
-        
-        # Считаем сумму (лучше в main.py с PRICES)
-        return total
-    except Exception as e:
-        print(f"[DB ERROR get_user_payments_sum] {e}")
-        return 0
-
 # Остальные функции остаются без изменений...
 def get_keys_with_expiry(user_id):
     """Для старого метода — uuid + end_date как datetime"""
@@ -326,9 +307,6 @@ def delete_key_by_uuid(u_uuid):
     cursor.execute("DELETE FROM keys WHERE uuid = ?", (u_uuid,))
     conn.commit()
 
-def add_payment(user_id, plan_key):
-    cursor.execute("INSERT INTO payments (user_id, plan_key) VALUES (?, ?)", (user_id, plan_key))
-    conn.commit()
 
 def get_last_pending_plan(user_id):
     cursor.execute("""
