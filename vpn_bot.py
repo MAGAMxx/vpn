@@ -562,7 +562,7 @@ def query_handler(call):
         )
     
         kb = InlineKeyboardMarkup()
-        kb.add(InlineKeyboardButton("Подключиться ⚡", callback_data=f"connect_{u_uuid}"))
+        kb.add(InlineKeyboardButton("Подключиться ⚡", url=f"https://magamix.onrender.com/url/?url={deeplink}"))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
     
         bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
@@ -613,7 +613,7 @@ def query_handler(call):
     
         kb = InlineKeyboardMarkup()
         kb.add(InlineKeyboardButton("Установить", url="https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973"))
-        kb.add(InlineKeyboardButton("Подключиться ⚡", url=deeplink))
+        kb.add(InlineKeyboardButton("Подключиться ⚡", url=f"https://magamix.onrender.com/url/?url={deeplink}"))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="my_key"))
     
         bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
@@ -638,7 +638,7 @@ def query_handler(call):
     
         kb = InlineKeyboardMarkup()
         kb.add(InlineKeyboardButton("Установить", url="https://play.google.com/store/apps/details?id=com.happproxy&hl=ru"))
-        kb.add(InlineKeyboardButton("Подключиться ⚡", url=deeplink))
+        kb.add(InlineKeyboardButton("Подключиться ⚡", url=f"https://magamix.onrender.com/url/?url={deeplink}"))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="my_key"))
     
         bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
@@ -672,7 +672,7 @@ def query_handler(call):
     
         kb = InlineKeyboardMarkup()
         deeplink = generate_happ_deeplink(sub_id)
-        kb.add(InlineKeyboardButton("Подключиться ⚡", url=deeplink))
+        kb.add(InlineKeyboardButton("Подключиться ⚡", url=f"https://magamix.onrender.com/url/?url={deeplink}"))
         #kb.add(InlineKeyboardButton(f"{EMOJI['copy']} Скопировать ключ", callback_data=f"copy_{u_uuid}"))
         #kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
         kb.add(InlineKeyboardButton(f"{EMOJI['home']} Главное Меню", callback_data="main"))
