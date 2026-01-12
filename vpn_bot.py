@@ -178,7 +178,7 @@ def give_referral_reward(referrer_id, referred_id):
             SELECT reward_given FROM referrals
             WHERE referrer_id = ? AND referred_id = ?
         """, (referrer_id, referred_id))
-        row = db_cursor.fetchone()))
+        row = db_cursor.fetchone()
         
         row = db.cursor.fetchone()
         if row and row[0] == 1:
