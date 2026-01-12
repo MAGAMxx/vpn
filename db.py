@@ -85,11 +85,15 @@ def add_user(uid, username, referrer_id=None):
     
 
 def add_key(user_id, u_uuid, sid, days):
-    """Создает новый ключ с правильными датами"""
+    """Создает новый ключ"""
     from datetime import datetime, timedelta
     
-    start_date = datetime.now()
-    end_date = start_date + timedelta(days=days)
+    print(f"DEBUG add_key: user_id={user_id}, uuid={u_uuid[:8]}, days={days}")
+    
+    start_date = datetime.now().isoformat()
+    end_date = (datetime.now() + timedelta(days=days)).isoformat()
+    
+    print(f"DEBUG: start_date={start_date}, end_date={end_date}")
     
     # Деактивируем предыдущие ключи пользователя
     cursor.execute("""
@@ -101,32 +105,53 @@ def add_key(user_id, u_uuid, sid, days):
     cursor.execute("""
         INSERT INTO keys (user_id, uuid, sid, days, start_date, end_date, is_active)
         VALUES (?, ?, ?, ?, ?, ?, 1)
-    """, (user_id, u_uuid, sid, days, start_date.isoformat(), end_date.isoformat()))
+    """, (user_id, u_uuid, sid, days, start_date, end_date))
     
     conn.commit()
+    
+    print(f"DEBUG: Ключ добавлен, id={cursor.lastrowid}")
     return cursor.lastrowid
 
 def get_active_key(user_id):
+    """Получает активный ключ пользователя"""
+    print(f"DEBUG get_active_key: user_id={user_id}")
+    
     cursor.execute("""
         SELECT * FROM keys
         WHERE user_id = ?
         AND is_active = 1
-        AND end_date > DATETIME('now')
+        AND datetime(end_date) > datetime('now')
         LIMIT 1
     """, (user_id,))
-   
+    
     row = cursor.fetchone()
+    
+    if row:
+        print(f"DEBUG: Найден ключ - row={row}")
+        # Проверяем формат end_date
+        end_date_index = 6  # Индекс end_date в результате
+        print(f"DEBUG: end_date={row[end_date_index]}, тип={type(row[end_date_index])}")
+    
     if not row:
+        print(f"DEBUG: Ключ не найден для user_id={user_id}")
         return None
-   
+    
+    # Преобразуем даты
     row_list = list(row)
     try:
-        row_list[3] = datetime.datetime.fromisoformat(row_list[3])
-        row_list[4] = datetime.datetime.fromisoformat(row_list[4])
-    except (ValueError, TypeError) as e:
+        # Пропускаем конвертацию, если дата уже в правильном формате
+        # или если это число дней
+        if row_list[6] and isinstance(row_list[6], str):
+            if '-' in row_list[6] and ':' in row_list[6]:  # Проверяем, это дата ISO?
+                row_list[6] = datetime.fromisoformat(row_list[6])
+            else:
+                print(f"DEBUG: Неправильный формат даты: {row_list[6]}")
+                return None
+    except (ValueError, TypeError, IndexError) as e:
         print(f"Ошибка преобразования дат: {e}")
+        print(f"DEBUG: Проблемная строка: {row}")
         return None
-   
+    
     return tuple(row_list)
 
 def get_keys(user_id):
