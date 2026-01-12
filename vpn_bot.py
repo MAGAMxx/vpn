@@ -470,25 +470,22 @@ def query_handler(call):
 
         end_date_formatted = end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M') + ' МСК'
 
-        sub_id = db.get_key_subid(u_uuid)
+        sub_id = db.get_key_subid(u_uuid) or u_uuid  # fallback на uuid, если sub_id None
 
         text = (
             f"{EMOJI['key']} *Детали ключа*\n\n"
             f"{EMOJI['time']} *Осталось:* **{remaining}**\n"
             f"*До:* {end_date_formatted}\n\n"
-            f"{EMOJI['link']} *Обычная ссылка:*\n`{link}`"
+            f"{EMOJI['link']} *Обычная ссылка:*\n`{link}`\n\n"
+            f"Нажмите кнопку ниже — Happ откроется и добавит подписку автоматически!"
         )
 
         kb = InlineKeyboardMarkup()
-        if sub_id:
-            deeplink = f"https://magamix.onrender.com/connect/{sub_id}"
-            kb.add(InlineKeyboardButton(
-                "Подключиться",
-                url=deeplink  # ← теперь https, Telegram примет
-            ))
+        deeplink = f"https://magamix.onrender.com/connect/{sub_id}"
+        kb.add(InlineKeyboardButton("Открыть в Happ одним кликом", url=deeplink))
         kb.add(InlineKeyboardButton(f"{EMOJI['copy']} Скопировать ключ", callback_data=f"copy_{u_uuid}"))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
-        #kb.add(InlineKeyboardButton(f"{EMOJI['home']} Главное", callback_data="main"))
+        kb.add(InlineKeyboardButton(f"{EMOJI['home']} Главное", callback_data="main"))
 
         bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
     
