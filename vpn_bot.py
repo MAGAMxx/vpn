@@ -153,22 +153,17 @@ def generate_vless_link(u_uuid):
             f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F# НИДЕРЛАНДЫ 🇳🇱 MAGAMIX")
 
 def generate_happ_deeplink(sub_id):
-    """Генерирует правильный deeplink для автоматического открытия в HAPP"""
+    """Генерирует deeplink для Happ в формате https://magamix.onrender.com/url/?url=happ://add/..."""
     if not sub_id:
         return None
     
-    # 1. Ссылка на подписку, которую будет читать HAPP (через ваш Render)
-    # Обязательно https:// в начале
-    sub_url = f"magamix.onrender.com{sub_id}"
+    # Базовый URL для подписки
+    subscription_url = f"https://magamix.onrender.com/connect/{sub_id}"
     
-    # 2. Команда для приложения HAPP
-    happ_link = f"happ://add/{sub_url}"
+    # Формируем полный deeplink
+    deeplink = f"https://magamix.onrender.com/url/?url=happ://add/{subscription_url}"
     
-    # 3. Финальная ссылка для редиректа в 1 клик
-    # Кнопка в Телеграм ДОЛЖНА начинаться с https://
-    final_url = f"https://magamix.onrender.com{happ_link}"
-    
-    return final_url
+    return deeplink
 
 def get_remaining_time_str(end_date):
     end_date_aware = MOSCOW_TZ.localize(end_date)
@@ -188,33 +183,25 @@ def generate_referral_link(user_id):
 
 def give_referral_reward(referrer_id, referred_id):
     try:
-        # 1. Проверяем, была ли уже выдана награда
-        with db.get_db_connection() as conn:
-            db_cursor = conn.cursor()
-            db_cursor.execute("""
-                SELECT reward_given FROM referrals
-                WHERE referrer_id = ? AND referred_id = ?
-            """, (referrer_id, referred_id))
-            row = db_cursor.fetchone()
+        db_cursor = db.conn.cursor()
+        db_cursor.execute("""
+            SELECT reward_given FROM referrals
+            WHERE referrer_id = ? AND referred_id = ?
+        """, (referrer_id, referred_id))
+        row = db_cursor.fetchone()
         
-        # В SQLite fetchone возвращает кортеж, берем первый элемент [0]
         if row and row[0] == 1:
             return False
         
-        # 2. Получаем данные активного ключа (возвращает кортеж из db.py)
         active_key = db.get_active_key(referrer_id)
         
         if active_key:
-            # Продлеваем существующий ключ
             success = db.extend_key_days(referrer_id, REFERRAL_REWARD_DAYS)
             if success:
-                # В кортеже из таблицы keys: [1] - uuid, [4] - end_date
                 uuid_val = active_key[1]
                 email = f"user_{referrer_id}*{uuid_val[:8]}"
                 
-                # Используем дату из кортежа для расчета новых дней для панели
-                old_end_date = active_key[4]
-                new_end_date = old_end_date + datetime.timedelta(days=REFERRAL_REWARD_DAYS)
+                new_end_date = active_key[4] + datetime.timedelta(days=REFERRAL_REWARD_DAYS)
                 days_until_new_end = (new_end_date - datetime.datetime.now()).days
                 
                 if days_until_new_end > 0:
@@ -231,20 +218,18 @@ def give_referral_reward(referrer_id, referred_id):
                         f"{EMOJI['trophy']} Приглашайте больше друзей и получайте бонусы!",
                         parse_mode="Markdown"
                     )
-                except: pass
+                except:
+                    pass
+                
                 return True
         else:
-            # Если ключа нет — создаем новый с нуля
             u_uuid = str(uuid.uuid4())
-            # Формируем уникальный email для 3X-UI
             email = f"ref*{referrer_id}*{int(time.time())}"
             
-            # Добавляем в панель
             sub_id = add_user_to_xray(u_uuid, email, REFERRAL_REWARD_DAYS)
             if sub_id:
-                # Сохраняем в БД (add_key и update_key_subid теперь безопасны)
                 db.add_key(referrer_id, u_uuid, SID, REFERRAL_REWARD_DAYS)
-                db.update_key_subid(u_uuid, sub_id) 
+                db.update_key_subid(u_uuid, sub_id) # ← сохраняем sub_id
                 
                 try:
                     bot.send_message(
@@ -252,11 +237,13 @@ def give_referral_reward(referrer_id, referred_id):
                         f"{EMOJI['party']} *Бонус за друга!*\n\n"
                         f"{EMOJI['gift']} Вам выдан новый ключ на *{REFERRAL_REWARD_DAYS} дней*!\n"
                         f"{EMOJI['friends']} Ваш друг успешно зарегистрировался.\n"
-                        f"{EMOJI['key']} Ключ доступен в разделе «Мои ключи»\n\n"
+                        f"{EMOJI['key']} Ключ в «Мои ключи»\n\n"
                         f"{EMOJI['trophy']} Приглашайте больше друзей!",
                         parse_mode="Markdown"
                     )
-                except: pass
+                except:
+                    pass
+                
                 return True
         
         return False
@@ -417,46 +404,40 @@ def stats_command(message):
         bot.send_message(message.chat.id, "⛔ Команда доступна только администратору")
         return
     
-    # 1. Получаем общую статистику (эти функции в db.py мы уже переписали на безопасные)
+    # Получаем статистику через функции из db
     total_users = db.get_total_users_count()
     total_keys = db.get_total_keys_count()
     active_keys = db.get_active_keys_count()
     
-    # 2. Для сложных расчетов создаем временное соединение
-    try:
-        with db.get_db_connection() as conn:
-            db_cursor = conn.cursor()
-            
-            # Считаем сумму платежей
-            db_cursor.execute("""
-                SELECT plan_key, COUNT(*) as count 
-                FROM payments 
-                WHERE status = 'confirmed' 
-                GROUP BY plan_key
-            """)
-            
-            total_sum = 0
-            payments_rows = db_cursor.fetchall()
-            payments_info = []
-            
-            for plan_key, count in payments_rows:
-                if plan_key in PRICES:
-                    plan_total = PRICES[plan_key]['price'] * count
-                    total_sum += plan_total
-                    payments_info.append(f"  • {PRICES[plan_key]['name']}: {count} × {PRICES[plan_key]['price']}₽ = {plan_total}₽")
-            
-            # Получаем количество новых пользователей за последние 24 часа
-            db_cursor.execute("""
-                SELECT COUNT(*) FROM users 
-                WHERE registration_date >= DATETIME('now', '-1 day')
-            """)
-            new_last_24h = db_cursor.fetchone()[0]
-    except Exception as e:
-        print(f"[STATS ERROR] {e}")
-        bot.send_message(message.chat.id, "❌ Ошибка при получении статистики из БД")
-        return
-
-    # 3. Формируем текст
+    # Используем курсор из модуля db
+    db_cursor = db.conn.cursor()
+    
+    # Считаем сумму платежей
+    db_cursor.execute("""
+        SELECT plan_key, COUNT(*) as count 
+        FROM payments 
+        WHERE status = 'confirmed' 
+        GROUP BY plan_key
+    """)
+    
+    total_sum = 0
+    payments_rows = db_cursor.fetchall()
+    payments_info = []
+    
+    for plan_key, count in payments_rows:
+        if plan_key in PRICES:
+            plan_total = PRICES[plan_key]['price'] * count
+            total_sum += plan_total
+            payments_info.append(f"  • {PRICES[plan_key]['name']}: {count} × {PRICES[plan_key]['price']}₽ = {plan_total}₽")
+    
+    # Получаем количество новых пользователей за последние 24 часа
+    db_cursor.execute("""
+        SELECT COUNT(*) FROM users 
+        WHERE registration_date >= DATETIME('now', '-1 day')
+    """)
+    new_last_24h = db_cursor.fetchone()[0]
+    
+    # Формируем текст
     stats_text = (
         f"📊 *СТАТИСТИКА БОТА*\n\n"
         f"👥 *Пользователи:*\n"
@@ -587,20 +568,18 @@ def query_handler(call):
     elif call.data.startswith("connect_"):
         u_uuid = call.data.replace("connect_", "")
         
-        # ИСПРАВЛЕНО: Используем безопасное подключение
-        with db.get_db_connection() as conn:
-            db_cursor = conn.cursor()
-            db_cursor.execute("SELECT end_date FROM keys WHERE uuid=? AND user_id=?", (u_uuid, uid))
-            row = db_cursor.fetchone()
+        # Проверяем, что ключ существует
+        db_cursor = db.conn.cursor()
+        db_cursor.execute("SELECT end_date FROM keys WHERE uuid=? AND user_id=?", (u_uuid, uid))
+        row = db_cursor.fetchone()
         
         if not row:
-            bot.answer_callback_query(call.id, "❌ Ключ не найден")
+            bot.answer_callback_query(call.id, "Ключ не найден")
             return
     
         text = (
-            f"🚀 *Подключение к MAGAMIX VPN*\n\n"
-            f"Выберите ваше устройство:\n"
-            f"Бот отправит инструкцию и ссылку для автоматической настройки."
+            f"Выберите ваше устройство:\n\n"
+            f"Нажмите кнопку ниже — бот отправит инструкцию и ссылку"
         )
     
         kb = InlineKeyboardMarkup(row_width=2)
@@ -664,38 +643,36 @@ def query_handler(call):
     
     elif call.data.startswith("show_key_"):
         u_uuid = call.data.replace("show_key_", "")
-        
-        # ИСПРАВЛЕНО: Безопасное подключение к БД
-        with db.get_db_connection() as conn:
-            db_cursor = conn.cursor()
-            db_cursor.execute("SELECT end_date FROM keys WHERE uuid=? AND user_id=?", (u_uuid, uid))
-            row = db_cursor.fetchone()
+        db_cursor = db.conn.cursor()
+        db_cursor.execute("SELECT end_date FROM keys WHERE uuid=? AND user_id=?", (u_uuid, uid))
+        row = db_cursor.fetchone()
     
         if not row:
-            bot.answer_callback_query(call.id, "❌ Ключ не найден")
+            bot.answer_callback_query(call.id, "Ключ не найден")
             return
     
-        # Парсим дату
+    
         end_date = datetime.datetime.fromisoformat(str(row[0]))
         remaining = get_remaining_time_str(end_date)
-        
-        # Получаем sub_id через безопасную функцию, которую мы создали в db.py
-        sub_id = db.get_key_subid(u_uuid) or u_uuid 
+        link = generate_vless_link(u_uuid)
+        end_date_formatted = end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M') + ' МСК'
+        sub_id = db.get_key_subid(u_uuid) or u_uuid # fallback на uuid, если sub_id None
     
-        end_date_formatted = end_date.strftime('%d.%m.%Y в %H:%M') + ' МСК'
-    
+        # Используем MarkdownV2 для правильного экранирования
         text = (
-            f"{EMOJI['key']} *ДЕТАЛИ КЛЮЧА*\n\n"
-            f"{EMOJI['time']} *Осталось:* `{remaining}`\n"
-            f"📅 *Действует до:* {end_date_formatted}\n\n"
-            f"🚀 Нажмите кнопку ниже — **HAPP** откроется и добавит вашу подписку **MAGAMIX VPN** автоматически!"
+            f"{EMOJI['key']} *Детали ключа*\n\n"
+            f"{EMOJI['time']} *Осталось:* **{remaining}**\n"
+            f"*До:* {end_date_formatted}\n\n"
+            #f"{EMOJI['link']} *Обычная ссылка:*\n"
+            #f"`{link}`\n\n"  # Используем код для ссылки
+            f"Нажмите кнопку ниже — Happ откроется и добавит подписку автоматически!"
         )
     
         kb = InlineKeyboardMarkup()
-        # Генерируем ссылку для 1 клика (через ваш Render-редиректор)
         deeplink = generate_happ_deeplink(sub_id)
-        
-        kb.add(InlineKeyboardButton("⚡ ПОДКЛЮЧИТЬСЯ", url=deeplink))
+        kb.add(InlineKeyboardButton("Подключиться ⚡", url=deeplink))
+        #kb.add(InlineKeyboardButton(f"{EMOJI['copy']} Скопировать ключ", callback_data=f"copy_{u_uuid}"))
+        #kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
         kb.add(InlineKeyboardButton(f"{EMOJI['home']} Главное Меню", callback_data="main"))
     
         bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
@@ -903,66 +880,51 @@ def handle_receipt(message):
 def auto_delete_loop():
     while True:
         try:
-            # get_all_expired_keys уже переписана нами в db.py безопасно
             expired = db.get_all_expired_keys()
-            
             for user_id, u_uuid in expired:
-                # 1. Удаляем из панели 3X-UI
-                # Формируем email точно так же, как при создании
-                email = f"user_{user_id}*{u_uuid[:8]}" 
-                deleted_from_panel = delete_user_from_xray(email)
-                
-                # 2. Удаляем из базы данных (безопасно)
-                with db.get_db_connection() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute("DELETE FROM keys WHERE uuid = ?", (u_uuid,))
-                    conn.commit()
+                db_cursor = db.conn.cursor()
+                db_cursor.execute("SELECT * FROM keys WHERE uuid = ?", (u_uuid,))
+                row = db_cursor.fetchone()
+                if row:
+                    email = f"user_{user_id}_{u_uuid[:8]}"
+                    
 
-                # 3. Уведомляем пользователя
-                try:
-                    bot.send_message(
-                        user_id,
-                        f"{EMOJI['cross']} *Срок действия ключа истек*\n\n"
-                        f"{EMOJI['info']} Ваш доступ к **{HAPP_NAME}** был приостановлен.\n"
-                        f"{EMOJI['buy']} Чтобы продолжить пользоваться VPN, продлите ключ или приобретите новый.\n\n"
-                        f"{EMOJI['friends']} Напоминаем: за каждого друга вы получаете *+{REFERRAL_REWARD_DAYS} дней*!",
-                        parse_mode="Markdown"
-                    )
-                except Exception as send_error:
-                    # Пользователь мог заблокировать бота
-                    print(f"[NOTIFY ERROR] User {user_id} blocked bot: {send_error}")
-
-            if expired:
-                print(f"[CLEANUP] Удалено {len(expired)} истекших ключей.")
-
+                    try:
+                        bot.send_message(
+                            user_id,
+                            f"{EMOJI['cross']} *Срок действия ключа истек*\n\n"
+                            f"{EMOJI['info']} Ключ был автоматически удален.\n"
+                            f"{EMOJI['buy']} Приобретите новый ключ в разделе «Купить VPN»\n"
+                            f"{EMOJI['friends']} Или пригласите друга и получите +{REFERRAL_REWARD_DAYS} дней!",
+                            parse_mode="Markdown"
+                        )
+                    except:
+                        pass
         except Exception as e:
             print(f"[CLEANUP ERROR] {e}")
-            
-        # Проверка раз в 30 минут
         time.sleep(1800)
 
 def calculate_total_payments():
-    """Считает общую сумму платежей безопасно"""
+    """Считает общую сумму платежей"""
     try:
-        # ИСПРАВЛЕНО: Создаем независимое соединение
-        with db.get_db_connection() as conn:
-            db_cursor = conn.cursor()
-            
-            db_cursor.execute("""
-                SELECT plan_key, COUNT(*) as count 
-                FROM payments 
-                WHERE status = 'confirmed' 
-                GROUP BY plan_key
-            """)
-            
-            total = 0
-            rows = db_cursor.fetchall()
-            
-            for plan_key, count in rows:
-                if plan_key in PRICES:  # PRICES из config.py
-                    total += PRICES[plan_key]['price'] * count
-                    
-            return total
+        # Используем курсор из модуля db
+        db_cursor = db.conn.cursor()
+        
+        db_cursor.execute("""
+            SELECT plan_key, COUNT(*) as count 
+            FROM payments 
+            WHERE status = 'confirmed' 
+            GROUP BY plan_key
+        """)
+        
+        total = 0
+        rows = db_cursor.fetchall()
+        
+        for plan_key, count in rows:
+            if plan_key in PRICES:  # PRICES из config.py
+                total += PRICES[plan_key]['price'] * count
+                
+        return total
     except Exception as e:
         print(f"[CALCULATE PAYMENTS ERROR] {e}")
         return 0
@@ -971,50 +933,46 @@ def calculate_total_payments():
 def notify_expiry_warning():
     while True:
         try:
-            # ИСПРАВЛЕНО: Используем независимое соединение для фонового потока
-            with db.get_db_connection() as conn:
-                db_cursor = conn.cursor()
+            # Используем курсор из модуля db
+            db_cursor = db.conn.cursor()
+            
+            # Получаем все активные ключи, где осталось 1–2 дня
+            db_cursor.execute("""
+                SELECT user_id, uuid, end_date 
+                FROM keys 
+                WHERE is_active = 1 
+                AND end_date > DATETIME('now') 
+                AND end_date <= DATETIME('now', '+2 days')
+                AND end_date > DATETIME('now', '+1 day')  -- только 1–2 дня осталось
+            """)
+            
+            rows = db_cursor.fetchall()
+            
+            for row in rows:
+                user_id, u_uuid, end_date_str = row
+                end_date = datetime.datetime.fromisoformat(end_date_str)
+                remaining_days = (end_date - datetime.datetime.now()).days
                 
-                # Получаем ключи, срок которых истекает через 24-48 часов
-                db_cursor.execute("""
-                    SELECT user_id, uuid, end_date 
-                    FROM keys 
-                    WHERE is_active = 1 
-                    AND end_date > DATETIME('now', '+1 day') 
-                    AND end_date <= DATETIME('now', '+2 days')
-                """)
+                # Проверяем, не отправляли ли уже уведомление
+                # Пока просто отправляем раз в день
                 
-                rows = db_cursor.fetchall()
+                text = (
+                    f"⚠️ *Ваш ключ скоро истечёт!*\n\n"
+                    f"Осталось **{remaining_days} дней** до {end_date.strftime('%d.%m.%Y %H:%M')} МСК\n\n"
+                    f"🔑 Не забудьте продлить подписку в разделе «Купить VPN»!\n"
+                    f"Приглашай друзей — +{REFERRAL_REWARD_DAYS} дней бесплатно! 👥"
+                )
                 
-                for row in rows:
-                    user_id, u_uuid, end_date_str = row
-                    try:
-                        end_date = datetime.datetime.fromisoformat(end_date_str)
-                        # Используем вашу функцию для красивого отображения времени
-                        remaining = get_remaining_time_str(end_date)
-                        
-                        text = (
-                            f"⚠️ *ВНИМАНИЕ: Срок ключа истекает!*\n\n"
-                            f"{EMOJI['time']} Осталось: **{remaining}**\n"
-                            f"📅 Действует до: {end_date.strftime('%d.%m.%Y %H:%M')} МСК\n\n"
-                            f"{EMOJI['key']} Чтобы не потерять доступ к **{HAPP_NAME}**, продлите подписку в разделе «Купить VPN»\n\n"
-                            f"{EMOJI['friends']} Или пригласите друга и получите бонусные дни! 🎁"
-                        )
-                        
-                        try:
-                            bot.send_message(user_id, text, parse_mode="Markdown")
-                            print(f"[NOTIFY] Уведомление отправлено пользователю {user_id}")
-                        except Exception as send_error:
-                            print(f"[NOTIFY ERROR] Ошибка отправки пользователю {user_id}: {send_error}")
-                            
-                    except Exception as parse_error:
-                        print(f"[NOTIFY PARSE ERROR] Ошибка обработки даты для {u_uuid}: {parse_error}")
+                try:
+                    bot.send_message(user_id, text, parse_mode="Markdown")
+                    print(f"[NOTIFY] Отправлено предупреждение пользователю {user_id} (ключ {u_uuid})")
+                except Exception as e:
+                    print(f"[NOTIFY ERROR] Пользователь {user_id}: {e}")
         
         except Exception as e:
             print(f"[NOTIFY LOOP ERROR] {e}")
         
-        # Проверка раз в 12 часов (чтобы не пропустить никого из-за таймингов)
-        time.sleep(43200) 
+        time.sleep(86400)  # Проверять раз в сутки (24 часа)
 
 threading.Thread(target=notify_expiry_warning, daemon=True).start()
 threading.Thread(target=auto_delete_loop, daemon=True).start()
