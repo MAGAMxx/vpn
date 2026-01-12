@@ -50,9 +50,9 @@ def add_user_to_xray(user_uuid, email, days):
     if not xui_login():
         print("[ADD CLIENT] Не удалось авторизоваться")
         return None
-
+    
     expiry_time = int((time.time() + (days * 86400)) * 1000)
-
+    
     payload = {
         "id": INBOUND_ID,
         "settings": json.dumps({
@@ -69,45 +69,49 @@ def add_user_to_xray(user_uuid, email, days):
             }]
         })
     }
-
+    
     try:
         url = f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/addClient"
-              r = session.post(url, json=payload, verify=False, timeout=15)
-              response_data = r.json()
-
-              if response_data.get("success"):  # ← здесь отступ должен быть такой же, как у url и r
-                  # Принудительно запрашиваем подписку
-                  sub_url = f"https://31.130.131.214:{SUB_PORT}{SUB_PATH}{user_uuid}"
-                  try:
-                      session.get(sub_url, verify=False, timeout=5)
-                      print(f"[INFO] Запросил подписку для генерации subId: {sub_url}")
-                  except Exception as e:
-                      print(f"[WARNING] Не удалось запросить подписку: {e}")
-  
-            # Получаем inbound
-                  get_url = f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/get/{INBOUND_ID}"
-                  r_get = session.get(get_url, verify=False, timeout=10)
-                  data = r_get.json()
-
-                  if data.get("success"):
-                      settings = json.loads(data["obj"]["settings"])
-                      for cl in settings.get("clients", []):
-                          if cl["id"] == user_uuid:
-                              sub_id = cl.get("subId")
-                              if sub_id:
-                                  print(f"[SUCCESS] subId получен после запроса: {sub_id}")
-                                  return sub_id
-                              else:
-                                  print("[WARNING] subId всё ещё не найден после запроса!")
-                                  return None
-                  else:
-                      print("[ERROR] Не удалось получить inbound после добавления")
-                      return None
-
-              else:
-                  msg = response_data.get("msg", "")
-                  print(f"[ADD CLIENT] Ошибка панели: {msg}")
-                  return None
+        r = session.post(url, json=payload, verify=False, timeout=15)
+        response_data = r.json()
+        
+        if response_data.get("success"):
+            # Принудительно запрашиваем подписку, чтобы 3X-UI сгенерировал subId
+            sub_url = f"https://31.130.131.214:{SUB_PORT}{SUB_PATH}{user_uuid}"
+            try:
+                session.get(sub_url, verify=False, timeout=5)
+                print(f"[INFO] Запросил подписку для генерации subId: {sub_url}")
+            except Exception as e:
+                print(f"[WARNING] Не удалось запросить подписку: {e}")
+            
+            # Получаем свежие настройки inbound
+            get_url = f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/get/{INBOUND_ID}"
+            r_get = session.get(get_url, verify=False, timeout=10)
+            data = r_get.json()
+            
+            if data.get("success"):
+                settings = json.loads(data["obj"]["settings"])
+                for cl in settings.get("clients", []):
+                    if cl["id"] == user_uuid:
+                        sub_id = cl.get("subId")
+                        if sub_id:
+                            print(f"[SUCCESS] subId получен после запроса: {sub_id}")
+                            return sub_id
+                        else:
+                            print("[WARNING] subId всё ещё не найден после запроса!")
+                            return None
+            else:
+                print("[ERROR] Не удалось получить inbound после добавления")
+                return None
+        
+        else:
+            msg = response_data.get("msg", "")
+            print(f"[ADD CLIENT] Ошибка панели: {msg}")
+            return None
+    
+    except Exception as e:
+        print(f"[ADD CLIENT ERROR] {e}")
+        return None
 
 def update_user_in_xray(email, new_days):
     if not xui_login():
