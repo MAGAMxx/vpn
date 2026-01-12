@@ -276,11 +276,11 @@ def get_instructions_menu(uuid_key=None):
     kb = InlineKeyboardMarkup()
     if uuid_key:
         kb.add(InlineKeyboardButton(
-            f"{EMOJI['copy']} Скопировать ключ",
+            #f"{EMOJI['copy']} Скопировать ключ",
             callback_data=f"copy_{uuid_key}"
         ))
     kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад в Мои ключи", callback_data="my_keys"))
-    kb.add(InlineKeyboardButton(f"{EMOJI['home']} В главное меню", callback_data="main"))
+    #kb.add(InlineKeyboardButton(f"{EMOJI['home']} В главное меню", callback_data="main"))
     return kb
 
 def get_referral_menu(user_id):
@@ -294,7 +294,7 @@ def get_referral_menu(user_id):
     ref_stats = db.get_referrals_stats(user_id)
     
     kb.add(InlineKeyboardButton(
-        f"{EMOJI['invite']} Скопировать ссылку",
+        #f"{EMOJI['invite']} Скопировать ссылку",
         callback_data=f"copy_ref_{user_id}"
     ))
     
@@ -478,16 +478,16 @@ def query_handler(call):
             f"{EMOJI['key']} *Детали ключа*\n\n"
             f"{EMOJI['time']} *Осталось:* **{remaining}**\n"
             f"*До:* {end_date_formatted}\n\n"
-            f"{EMOJI['link']} *Обычная ссылка:*\n"
-            f"`{link}`\n\n"  # Используем код для ссылки
+            #f"{EMOJI['link']} *Обычная ссылка:*\n"
+            #f"`{link}`\n\n"  # Используем код для ссылки
             f"Нажмите кнопку ниже — Happ откроется и добавит подписку автоматически!"
         )
     
         kb = InlineKeyboardMarkup()
         deeplink = generate_happ_deeplink(sub_id)
-        kb.add(InlineKeyboardButton("Открыть в Happ одним кликом", url=deeplink))
-        kb.add(InlineKeyboardButton(f"{EMOJI['copy']} Скопировать ключ", callback_data=f"copy_{u_uuid}"))
-        kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
+        kb.add(InlineKeyboardButton("Подключиться ⚡", url=deeplink))
+        #kb.add(InlineKeyboardButton(f"{EMOJI['copy']} Скопировать ключ", callback_data=f"copy_{u_uuid}"))
+        #kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
         kb.add(InlineKeyboardButton(f"{EMOJI['home']} Главное", callback_data="main"))
     
         bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
@@ -518,10 +518,6 @@ def query_handler(call):
             f"1. Отправьте другу вашу реферальную ссылку\n"
             f"2. Друг должен нажать на ссылку и зарегистрироваться\n"
             f"3. Вы автоматически получаете *+{REFERRAL_REWARD_DAYS} дней VPN*\n\n"
-            f"{EMOJI['info']} *Условия:*\n"
-            f"• Если у вас есть активный ключ — он продлится\n"
-            f"• Если ключа нет — создастся новый на {REFERRAL_REWARD_DAYS} дней\n"
-            f"• Бонус начисляется за каждого нового пользователя\n\n"
             f"{EMOJI['stats']} *Ваша статистика:*\n"
             f"• Всего приглашено: *{ref_stats['total']}*\n"
             f"• Получено бонусов: *{ref_stats['rewarded']}*\n"
@@ -549,7 +545,7 @@ def query_handler(call):
         
         kb = InlineKeyboardMarkup()
         kb.add(InlineKeyboardButton(f"{EMOJI['friends']} Вернуться к рефералке", callback_data="referral"))
-        kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
+        #kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
         
         bot.edit_message_text(text, uid, call.message.id,
                             reply_markup=kb, parse_mode="Markdown")
