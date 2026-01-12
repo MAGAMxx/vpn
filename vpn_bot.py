@@ -9,6 +9,7 @@ import threading
 import pytz
 import secrets  # Добавлен импорт для secrets.token_hex
 import db
+pip install flask
 from config import *
 requests.packages.urllib3.disable_warnings()
 
@@ -975,10 +976,35 @@ def notify_expiry_warning():
         
         time.sleep(86400)  # Проверять раз в сутки (24 часа)
 
+
+flask_app = Flask(__name__)
+
+@flask_app.route('/get_uuid', methods=['GET'])
+def get_uuid():
+    sub_id = request.args.get('sub_id')
+    if not sub_id:
+        return jsonify({"error": "sub_id required"}), 400
+
+    db_cursor = db.conn.cursor()
+    db_cursor.execute("SELECT uuid FROM keys WHERE sub_id = ?", (sub_id,))
+    row = db_cursor.fetchone()
+
+    if row:
+        real_uuid = row[0]
+        return jsonify({"uuid": real_uuid})
+    else:
+        return jsonify({"error": "sub_id not found"}), 404
+
+def run_flask():
+    # Запускаем Flask на порту 8000 (или другом свободном)
+    flask_app.run(host='0.0.0.0', port=8000, debug=False, use_reloader=False)
+
 threading.Thread(target=notify_expiry_warning, daemon=True).start()
 threading.Thread(target=auto_delete_loop, daemon=True).start()
 
 if __name__ == "__main__":
+    threading.Thread(target=run_flask, daemon=True).start()
+    print(f"{EMOJI['rocket']} Flask API запущен на порту 8000")
     print(f"{EMOJI['rocket']} Бот запущен {datetime.datetime.now(MOSCOW_TZ)}")
     print(f"{EMOJI['crown']} MAGAMIX VPN + Happ deeplink готов!")
     bot.infinity_polling()
