@@ -394,13 +394,16 @@ def stats_command(message):
         return
     
     
-    # Получаем статистику
+    # Получаем статистику через функции из db
     total_users = db.get_total_users_count()
     total_keys = db.get_total_keys_count()
     active_keys = db.get_active_keys_count()
     
+    # Используем курсор из модуля db
+    db_cursor = db.conn.cursor()
+    
     # Считаем сумму платежей
-    cursor.execute("""
+    db_cursor.execute("""
         SELECT plan_key, COUNT(*) as count 
         FROM payments 
         WHERE status = 'confirmed' 
@@ -408,7 +411,7 @@ def stats_command(message):
     """)
     
     total_sum = 0
-    payments_rows = cursor.fetchall()
+    payments_rows = db_cursor.fetchall()
     payments_info = []
     
     for plan_key, count in payments_rows:
@@ -418,11 +421,11 @@ def stats_command(message):
             payments_info.append(f"  • {PRICES[plan_key]['name']}: {count} × {PRICES[plan_key]['price']}₽ = {plan_total}₽")
     
     # Получаем количество новых пользователей за последние 24 часа
-    cursor.execute("""
+    db_cursor.execute("""
         SELECT COUNT(*) FROM users 
-        WHERE created_at >= DATETIME('now', '-1 day')
+        WHERE registration_date >= DATETIME('now', '-1 day')
     """)
-    new_last_24h = cursor.fetchone()[0]
+    new_last_24h = db_cursor.fetchone()[0]
     
     # Формируем текст
     stats_text = (
@@ -912,8 +915,11 @@ def calculate_total_payments():
 def notify_expiry_warning():
     while True:
         try:
+            # Используем курсор из модуля db
+            db_cursor = db.conn.cursor()
+            
             # Получаем все активные ключи, где осталось 1–2 дня
-            cursor.execute("""
+            db_cursor.execute("""
                 SELECT user_id, uuid, end_date 
                 FROM keys 
                 WHERE is_active = 1 
@@ -922,18 +928,18 @@ def notify_expiry_warning():
                 AND end_date > DATETIME('now', '+1 day')  -- только 1–2 дня осталось
             """)
             
-            rows = cursor.fetchall()
+            rows = db_cursor.fetchall()
             
             for row in rows:
                 user_id, u_uuid, end_date_str = row
                 end_date = datetime.datetime.fromisoformat(end_date_str)
                 remaining_days = (end_date - datetime.datetime.now()).days
                 
-                # Проверяем, не отправляли ли уже уведомление (можно добавить флаг в БД позже)
+                # Проверяем, не отправляли ли уже уведомление
                 # Пока просто отправляем раз в день
                 
                 text = (
-                    f"{EMOJI['warning']} *Ваш ключ скоро истечёт!*\n\n"
+                    f"⚠️ *Ваш ключ скоро истечёт!*\n\n"
                     f"Осталось **{remaining_days} дней** до {end_date.strftime('%d.%m.%Y %H:%M')} МСК\n\n"
                     f"🔑 Не забудьте продлить подписку в разделе «Купить VPN»!\n"
                     f"Приглашай друзей — +{REFERRAL_REWARD_DAYS} дней бесплатно! 👥"
