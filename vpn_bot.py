@@ -8,6 +8,7 @@ import time
 import threading
 import pytz
 import db
+import secrets
 from config import *
 
 requests.packages.urllib3.disable_warnings()
@@ -55,7 +56,7 @@ def add_user_to_xray(user_uuid, email, days):
     expiry_time = int((time.time() + (days * 86400)) * 1000)
     
     # Генерируем короткий subId
-    sub_id = secrets.token_hex(8)  # 16 символов hex
+    sub_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
 
     payload = {
         "id": INBOUND_ID,
@@ -104,8 +105,18 @@ def generate_subscription_config(sub_id):
     if not row:
         return None
     
-    u_uuid, end_date, days, user_id = row
-    expiry_timestamp = int(end_date.timestamp())
+    u_uuid, end_date_str, days, user_id = row
+    
+    # Преобразуем строку в datetime
+    try:
+        if isinstance(end_date_str, str):
+            end_date = datetime.datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+        else:
+            end_date = end_date_str
+        expiry_timestamp = int(end_date.timestamp())
+    except:
+        # Если не удалось преобразовать, используем время + дни
+        expiry_timestamp = int((time.time() + (days * 86400)) * 1000)
     
     # Генерируем VLESS ссылку
     vless_link = f"vless://{u_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#{HAPP_NAME} | {SERVER_LOCATION}"
@@ -124,21 +135,6 @@ def generate_subscription_config(sub_id):
             "updated": int(time.time() * 1000),
             "info": f"{SERVER_LOCATION} | {days} дней"
         },
-        "servers": [{
-            "id": 1,
-            "name": SERVER_LOCATION,
-            "type": "vless",
-            "address": SERVER_IP,
-            "port": int(SERVER_PORT),
-            "uuid": u_uuid,
-            "sni": SNI,
-            "fp": FP,
-            "pbk": PBK,
-            "sid": SID,
-            "security": "reality",
-            "remark": f"{HAPP_NAME} | {SERVER_LOCATION}",
-            "config": vless_link
-        }],
         "metadata": {
             "provider": HAPP_NAME,
             "support": "https://t.me/nejnayatp3",
@@ -573,8 +569,8 @@ def query_handler(call):
             f"{EMOJI['rocket']} Открыть в Happ", 
             url=deeplink
         ))
-    
-       kb.add(InlineKeyboardButton(
+     
+        kb.add(InlineKeyboardButton(
             f"{EMOJI['copy']} Ссылка-подписка", 
             callback_data=f"copy_{u_uuid}"
         ))
