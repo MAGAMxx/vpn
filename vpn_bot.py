@@ -166,7 +166,7 @@ def generate_happ_deeplink(sub_id):
     
     # 3. Финальная ссылка для редиректа в 1 клик
     # Кнопка в Телеграм ДОЛЖНА начинаться с https://
-    final_url = f"magamix.onrender.com{happ_link}"
+    final_url = f"https://magamix.onrender.com{happ_link}"
     
     return final_url
 
