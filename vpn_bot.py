@@ -46,13 +46,17 @@ def xui_login():
         print(f"[LOGIN ERROR] {e}")
         return False
 
+
 def add_user_to_xray(user_uuid, email, days):
     if not xui_login():
         print("[ADD CLIENT] Не удалось авторизоваться")
         return None
-    
+
     expiry_time = int((time.time() + (days * 86400)) * 1000)
     
+    # Генерируем короткий subId (как в панели: w794j35f1udoambp)
+    sub_id = secrets.token_hex(8)  # 16 символов hex — идеально подходит
+
     payload = {
         "id": INBOUND_ID,
         "settings": json.dumps({
@@ -65,28 +69,19 @@ def add_user_to_xray(user_uuid, email, days):
                 "expiryTime": expiry_time,
                 "enable": True,
                 "tgId": "",
-                "subId": ""
+                "subId": sub_id  # ← заполняем subId вручную — это ключ!
             }]
         })
     }
-    
+
     try:
         url = f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/addClient"
         r = session.post(url, json=payload, verify=False, timeout=15)
         response_data = r.json()
-        
+
         if response_data.get("success"):
-            # Принудительно запрашиваем подписку по uuid (чтобы панель "активировала" клиента)
-            sub_url = f"https://31.130.131.214:{SUB_PORT}{SUB_PATH}{user_uuid}"
-            try:
-                session.get(sub_url, verify=False, timeout=5)
-                print(f"[INFO] Запросил подписку по uuid: {sub_url}")
-            except Exception as e:
-                print(f"[WARNING] Не удалось запросить: {e}")
-            
-            # Возвращаем user_uuid как subId — это работает в твоей панели
-            print(f"[SUCCESS] Используем uuid как subId: {user_uuid}")
-            return user_uuid  # ← вот ключевой момент!
+            print(f"[SUCCESS] Ключ создан с subId: {sub_id}")
+            return sub_id  # возвращаем sub_id (короткий токен)
         
         else:
             msg = response_data.get("msg", "")
@@ -96,6 +91,10 @@ def add_user_to_xray(user_uuid, email, days):
     except Exception as e:
         print(f"[ADD CLIENT ERROR] {e}")
         return None
+
+def generate_subscription_link(sub_id):
+    return f"{SUB_BASE_URL}{SUB_PATH}{sub_id}"
+
 
 def update_user_in_xray(email, new_days):
     if not xui_login():
@@ -466,24 +465,26 @@ def query_handler(call):
 
         end_date = datetime.datetime.fromisoformat(str(row[0]))
         remaining = get_remaining_time_str(end_date)
-        link = generate_vless_link(u_uuid)
-
         end_date_formatted = end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M') + ' МСК'
 
-        sub_id = db.get_key_subid(u_uuid) or u_uuid  # fallback на uuid, если sub_id None
+        sub_id = db.get_key_subid(u_uuid)
+        if not sub_id:
+            bot.answer_callback_query(call.id, "Подписка не найдена")
+            return
+
+        sub_link = generate_subscription_link(sub_id)  # ← ссылка-подписка
 
         text = (
             f"{EMOJI['key']} *Детали ключа*\n\n"
             f"{EMOJI['time']} *Осталось:* **{remaining}**\n"
             f"*До:* {end_date_formatted}\n\n"
-            f"{EMOJI['link']} *Обычная ссылка:*\n`{link}`\n\n"
-            f"Нажмите кнопку ниже — Happ откроется и добавит подписку автоматически!"
+            f"Нажмите кнопку ниже — Happ откроется автоматически и добавит подписку с трафиком и сроком!"
         )
 
         kb = InlineKeyboardMarkup()
         deeplink = f"https://magamix.onrender.com/connect/{sub_id}"
         kb.add(InlineKeyboardButton("Открыть в Happ одним кликом", url=deeplink))
-        kb.add(InlineKeyboardButton(f"{EMOJI['copy']} Скопировать ключ", callback_data=f"copy_{u_uuid}"))
+        kb.add(InlineKeyboardButton(f"{EMOJI['copy']} Скопировать ссылку-подписку", callback_data=f"copy_{u_uuid}"))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
         kb.add(InlineKeyboardButton(f"{EMOJI['home']} Главное", callback_data="main"))
 
