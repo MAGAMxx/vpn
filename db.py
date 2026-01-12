@@ -254,6 +254,39 @@ def get_total_users_count():
         print(f"[DB ERROR get_total_users_count] {e}")
         return 0
 
+def get_total_keys_count():
+    """Возвращает общее количество ключей"""
+    try:
+        cursor.execute("SELECT COUNT(*) FROM keys")
+        return cursor.fetchone()[0]
+    except Exception as e:
+        print(f"[DB ERROR get_total_keys_count] {e}")
+        return 0
+
+def get_active_keys_count():
+    """Возвращает количество активных ключей"""
+    try:
+        cursor.execute("SELECT COUNT(*) FROM keys WHERE is_active = 1 AND end_date > DATETIME('now')")
+        return cursor.fetchone()[0]
+    except Exception as e:
+        print(f"[DB ERROR get_active_keys_count] {e}")
+        return 0
+
+def get_total_payments_sum():
+    """Возвращает общую сумму оплат"""
+    try:
+        cursor.execute("""
+            SELECT SUM(p.amount) 
+            FROM payments p
+            JOIN prices pr ON p.plan_key = pr.key
+            WHERE p.status = 'confirmed'
+        """)
+        result = cursor.fetchone()[0]
+        return result if result else 0
+    except Exception as e:
+        print(f"[DB ERROR get_total_payments_sum] {e}")
+        return 0
+
 # Остальные функции остаются без изменений...
 def get_keys_with_expiry(user_id):
     """Для старого метода — uuid + end_date как datetime"""
@@ -306,6 +339,30 @@ def get_last_pending_plan(user_id):
         conn.commit()
         return row[0]
     return None
+
+def get_user_payments_count(user_id):
+    """Возвращает количество покупок пользователя"""
+    try:
+        cursor.execute("SELECT COUNT(*) FROM payments WHERE user_id = ? AND status = 'confirmed'", (user_id,))
+        return cursor.fetchone()[0]
+    except Exception as e:
+        print(f"[DB ERROR get_user_payments_count] {e}")
+        return 0
+
+def get_user_payments_sum(user_id):
+    """Возвращает сумму покупок пользователя"""
+    try:
+        cursor.execute("""
+            SELECT SUM(p.amount) 
+            FROM payments p
+            JOIN prices pr ON p.plan_key = pr.key
+            WHERE p.user_id = ? AND p.status = 'confirmed'
+        """, (user_id,))
+        result = cursor.fetchone()[0]
+        return result if result else 0
+    except Exception as e:
+        print(f"[DB ERROR get_user_payments_sum] {e}")
+        return 0
 
 # НОВЫЕ ФУНКЦИИ ДЛЯ sub_id
 def update_key_subid(u_uuid, sub_id):
