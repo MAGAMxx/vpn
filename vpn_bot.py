@@ -491,10 +491,14 @@ def query_handler(call):
                 f"✅ Реферальная ссылка скопирована!\n\n{ref_link}",
                 show_alert=True
             )
-        else:
-            u_uuid = call.data.replace("copy_", "")
-            link = generate_vless_link(u_uuid)
-            bot.answer_callback_query(call.id, "✅ Ключ скопирован! Вставьте в приложение", show_alert=True)
+    else:
+        u_uuid = call.data.replace("copy_", "")
+        link = generate_vless_link(u_uuid)
+        # Используем MarkdownV2 для показа ссылки
+        bot.answer_callback_query(call.id, 
+            f"✅ Ключ скопирован!\n\n`{link}`\n\nВставьте в приложение", 
+            show_alert=True
+        )
     
     elif call.data == "referral":
         kb, ref_link, ref_stats = get_referral_menu(uid)
