@@ -333,7 +333,7 @@ def start_handler(message):
 
         sub_id = add_user_to_xray(u_uuid, email, 3)
         if sub_id:
-            db.add_key(user_id, u_uuid, SID, 3)
+            db.add_key(user_id, u_uuid, SID, 3)  
             db.update_key_subid(u_uuid, sub_id)
             text = (
                 f"{EMOJI['crown']} *Добро пожаловать!* {EMOJI['fire']}\n\n"
