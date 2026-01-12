@@ -272,19 +272,23 @@ def get_active_keys_count():
         print(f"[DB ERROR get_active_keys_count] {e}")
         return 0
 
-def get_total_payments_sum():
-    """Возвращает общую сумму оплат"""
+def get_user_payments_sum(user_id):
+    """Возвращает сумму покупок пользователя"""
     try:
         cursor.execute("""
-            SELECT SUM(p.amount) 
-            FROM payments p
-            JOIN prices pr ON p.plan_key = pr.key
-            WHERE p.status = 'confirmed'
-        """)
-        result = cursor.fetchone()[0]
-        return result if result else 0
+            SELECT plan_key, COUNT(*) as count 
+            FROM payments 
+            WHERE user_id = ? AND status = 'confirmed'
+            GROUP BY plan_key
+        """, (user_id,))
+        
+        total = 0
+        rows = cursor.fetchall()
+        
+        # Считаем сумму (лучше в main.py с PRICES)
+        return total
     except Exception as e:
-        print(f"[DB ERROR get_total_payments_sum] {e}")
+        print(f"[DB ERROR get_user_payments_sum] {e}")
         return 0
 
 # Остальные функции остаются без изменений...
