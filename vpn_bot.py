@@ -482,11 +482,11 @@ def query_handler(call):
         )
 
         kb = InlineKeyboardMarkup()
-        deeplink = f"https://magamix.onrender.com/connect/{sub_id}"
-        kb.add(InlineKeyboardButton("Открыть в Happ одним кликом", url=deeplink))
-        kb.add(InlineKeyboardButton(f"{EMOJI['copy']} Скопировать ссылку-подписку", callback_data=f"copy_{u_uuid}"))
+        deeplink = f"https://magamix.onrender.com/url/?url=happ://add/https://magamix.onrender.com/connect/{sub_id}"
+        kb.add(InlineKeyboardButton("Подключиться", url=deeplink))
+        #kb.add(InlineKeyboardButton(f"{EMOJI['copy']} Скопировать ссылку-подписку", callback_data=f"copy_{u_uuid}"))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
-        kb.add(InlineKeyboardButton(f"{EMOJI['home']} Главное", callback_data="main"))
+        #kb.add(InlineKeyboardButton(f"{EMOJI['home']} Главное", callback_data="main"))
 
         bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
     
