@@ -81,3 +81,8 @@ EMOJI = {
     "refresh": "🔄",
     "alert": "🚨"
 }
+
+
+HAPP_NAME = "MAGAMIX VPN"  # Название, которое будет отображаться в Happ
+HAPP_LOGO = "https://cdn-icons-png.flaticon.com/512/2917/2917995.png"  # URL вашего логотипа (опционально)
+SERVER_LOCATION = "Нидерланды 🇳🇱"  # Новое название сервера
