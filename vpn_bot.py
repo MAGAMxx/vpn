@@ -142,9 +142,17 @@ def generate_vless_link(u_uuid):
             f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#⚡MAGAMIX_VPN | НИДЕРЛАНДЫ")
 
 def generate_happ_deeplink(sub_id):
+    """Генерирует deeplink для Happ в формате https://magamix.onrender.com/url/?url=happ://add/..."""
     if not sub_id:
         return None
-    return f"happ://add/{RENDER_URL}/connect/{sub_id}"
+    
+    # Базовый URL для подписки
+    subscription_url = f"https://magamix.onrender.com/connect/{sub_id}"
+    
+    # Формируем полный deeplink
+    deeplink = f"https://magamix.onrender.com/url/?url=happ://add/{subscription_url}"
+    
+    return deeplink
 
 def get_remaining_time_str(end_date):
     end_date_aware = MOSCOW_TZ.localize(end_date)
@@ -475,7 +483,7 @@ def query_handler(call):
         )
     
         kb = InlineKeyboardMarkup()
-        deeplink = f"https://magamix.onrender.com/connect/{sub_id}"
+        deeplink = generate_happ_deeplink(sub_id)
         kb.add(InlineKeyboardButton("Открыть в Happ одним кликом", url=deeplink))
         kb.add(InlineKeyboardButton(f"{EMOJI['copy']} Скопировать ключ", callback_data=f"copy_{u_uuid}"))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
