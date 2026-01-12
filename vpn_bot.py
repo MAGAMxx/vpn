@@ -153,15 +153,16 @@ def generate_vless_link(u_uuid):
             f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F# НИДЕРЛАНДЫ 🇳🇱 MAGAMIX")
 
 def generate_happ_deeplink(sub_id):
-    """Генерирует deeplink для Happ в формате https://magamix.onrender.com/url/?url=happ://add/..."""
     if not sub_id:
         return None
     
-    # Базовый URL для подписки
     subscription_url = f"https://magamix.onrender.com/sub/{sub_id}"
     
-    # Формируем полный deeplink
-    deeplink = f"https://magamix.onrender.com/url/?url=happ://add/{subscription_url}"
+    # Прямая ссылка без /url/ (если Happ открывает нормально)
+    deeplink = f"happ://add/{subscription_url}"
+    
+    # Или с обёрткой, если без неё не открывается
+    # deeplink = f"https://magamix.onrender.com/url/?url=happ://add/{subscription_url}"
     
     return deeplink
 
