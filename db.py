@@ -97,26 +97,26 @@ def add_user(uid, username, referrer_id=None):
 def add_key(user_id, u_uuid, sid, days):
     """Добавляет ключ в базу"""
     try:
-        end_date = datetime.datetime.now() + datetime.timedelta(days=days)
         start_date = datetime.datetime.now()
+        end_date = datetime.datetime.now() + datetime.timedelta(days=days)
         
         # Деактивируем старые ключи
         cursor.execute("""
             UPDATE keys SET is_active = 0
-            WHERE user_id = ? AND is_active = 1
+            WHERE user_id = ?
         """, (user_id,))
         
         # Добавляем новый ключ
         cursor.execute("""
-            INSERT INTO keys (user_id, uuid, sid, days, end_date, start_date, is_active)
+            INSERT INTO keys (user_id, uuid, sid, days, start_date, end_date, is_active)
             VALUES (?, ?, ?, ?, ?, ?, 1)
-        """, (user_id, u_uuid, sid, days, end_date, start_date))
+        """, (user_id, u_uuid, sid, days, start_date, end_date))
         
         conn.commit()
-        return True
+        return cursor.lastrowid
     except Exception as e:
         print(f"[DB ERROR] Ошибка при добавлении ключа: {e}")
-        return False
+        return None
 
 def get_active_key(user_id):
     """Возвращает активный ключ пользователя"""
