@@ -9,7 +9,7 @@ import threading
 import pytz
 import secrets  # Добавлен импорт для secrets.token_hex
 import db
-pip install flask
+import flask
 from config import *
 requests.packages.urllib3.disable_warnings()
 
