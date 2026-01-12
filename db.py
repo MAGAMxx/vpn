@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS keys (
     end_date DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     sub_id TEXT,
-    is_active INTEGER DEFAULT 1,  # ← ДОБАВЬТЕ ЭТУ СТРОКУ
+    is_active INTEGER DEFAULT 1,
     FOREIGN KEY (user_id) REFERENCES users(id)
 )
 ''')
