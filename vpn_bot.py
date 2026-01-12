@@ -158,7 +158,7 @@ def generate_happ_deeplink(sub_id):
         return None
     
     # Базовый URL для подписки
-    subscription_url = f"https://magamix.onrender.com/connect/{sub_id}"
+    subscription_url = f"https://magamix.onrender.com/sub/{sub_id}"
     
     # Формируем полный deeplink
     deeplink = f"https://magamix.onrender.com/url/?url=happ://add/{subscription_url}"
