@@ -245,6 +245,15 @@ def get_user_info(user_id):
         'has_active_key': active_key is not None
     }
 
+def get_total_users_count():
+    """Возвращает общее количество пользователей"""
+    try:
+        cursor.execute("SELECT COUNT(*) FROM users")
+        return cursor.fetchone()[0]
+    except Exception as e:
+        print(f"[DB ERROR get_total_users_count] {e}")
+        return 0
+
 # Остальные функции остаются без изменений...
 def get_keys_with_expiry(user_id):
     """Для старого метода — uuid + end_date как datetime"""
