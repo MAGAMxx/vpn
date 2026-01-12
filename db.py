@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS keys (
     start_date TEXT,
     end_date TEXT,
     is_active INTEGER DEFAULT 1,
-    sub_id TEXT, -- НОВАЯ КОЛОНКА для sub_id подписки Happ
+    sub_id TEXT, 
     FOREIGN KEY (user_id) REFERENCES users(id)
 )
 ''')
@@ -34,7 +34,7 @@ cursor.execute('''
 CREATE TABLE IF NOT EXISTS payments (
     user_id INTEGER,
     plan_key TEXT,
-    amount REAL,  # НОВАЯ КОЛОНКА
+    amount REAL, 
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     status TEXT DEFAULT 'pending',
     FOREIGN KEY (user_id) REFERENCES users(id)
