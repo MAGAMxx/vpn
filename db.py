@@ -86,17 +86,17 @@ def add_user(uid, username, referrer_id=None):
 def add_key(user_id, u_uuid, sid, days):
     start_date = datetime.datetime.now().isoformat()
     end_date = (datetime.datetime.now() + datetime.timedelta(days=days)).isoformat()
-   
+    
     cursor.execute("""
         UPDATE keys SET is_active = 0
         WHERE user_id = ? AND is_active = 1
     """, (user_id,))
-   
+    
     cursor.execute("""
-        INSERT INTO keys (user_id, uuid, sid, start_date, end_date, is_active)
+        INSERT INTO keys (user_id, uuid, sid, created_at, end_date, is_active)
         VALUES (?, ?, ?, ?, ?, 1)
     """, (user_id, u_uuid, sid, start_date, end_date))
-   
+    
     conn.commit()
     return cursor.lastrowid
 
