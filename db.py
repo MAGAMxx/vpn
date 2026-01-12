@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS keys (
     days INTEGER,       
     end_date DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    sub_id TEXT,          
+    sub_id TEXT,
+    is_active INTEGER DEFAULT 1,  # ← ДОБАВЬТЕ ЭТУ СТРОКУ
     FOREIGN KEY (user_id) REFERENCES users(id)
 )
 ''')
@@ -103,15 +104,15 @@ def get_active_key(user_id):
     cursor.execute("""
         SELECT * FROM keys
         WHERE user_id = ?
-        AND is_active = 1
         AND end_date > DATETIME('now')
+        ORDER BY end_date DESC
         LIMIT 1
     """, (user_id,))
-   
+    
     row = cursor.fetchone()
     if not row:
         return None
-   
+    
     row_list = list(row)
     try:
         row_list[3] = datetime.datetime.fromisoformat(row_list[3])
@@ -119,7 +120,7 @@ def get_active_key(user_id):
     except (ValueError, TypeError) as e:
         print(f"Ошибка преобразования дат: {e}")
         return None
-   
+    
     return tuple(row_list)
 
 def get_keys(user_id):
