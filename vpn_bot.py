@@ -65,7 +65,7 @@ def add_user_to_xray(user_uuid, email, days):
             "clients": [{
                 "id": user_uuid,
                 "alterId": 0,
-                "email": f"🇳🇱 ⚡MAGAMIX VPN {email}",
+                "email": f"🇳🇱 НИДЕРЛАНДЫ⚡MAGAMIX VPN {email}",
                 "limitIp": 2,
                 "totalGB": 0,
                 "expiryTime": expiry_time,
@@ -140,7 +140,7 @@ def delete_user_from_xray(email):
 def generate_vless_link(u_uuid):
     # Экранируем специальные символы для Markdown
     return (f"vless://{u_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality"
-            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#⚡MAGAMIX_VPN | НИДЕРЛАНДЫ")
+            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F# НИДЕРЛАНДЫ 🇳🇱 MAGAMIX")
 
 def generate_happ_deeplink(sub_id):
     """Генерирует deeplink для Happ в формате https://magamix.onrender.com/url/?url=happ://add/..."""
