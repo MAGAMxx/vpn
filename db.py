@@ -34,6 +34,7 @@ cursor.execute('''
 CREATE TABLE IF NOT EXISTS payments (
     user_id INTEGER,
     plan_key TEXT,
+    amount REAL,  # НОВАЯ КОЛОНКА
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     status TEXT DEFAULT 'pending',
     FOREIGN KEY (user_id) REFERENCES users(id)
@@ -119,6 +120,13 @@ def get_active_key(user_id):
         return None
     
     return tuple(row_list)
+
+def add_payment(user_id, plan_key, amount):
+    cursor.execute("""
+        INSERT INTO payments (user_id, plan_key, amount, status) 
+        VALUES (?, ?, ?, 'pending')
+    """, (user_id, plan_key, amount))
+    conn.commit()
 
 def get_keys(user_id):
     cursor.execute("""
