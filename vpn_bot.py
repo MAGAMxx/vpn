@@ -173,10 +173,12 @@ def generate_referral_link(user_id):
 
 def give_referral_reward(referrer_id, referred_id):
     try:
-        db.cursor.execute("""
+        db_cursor = db.conn.cursor()
+        db_cursor.execute("""
             SELECT reward_given FROM referrals
             WHERE referrer_id = ? AND referred_id = ?
         """, (referrer_id, referred_id))
+        row = db_cursor.fetchone()))
         
         row = db.cursor.fetchone()
         if row and row[0] == 1:
@@ -393,7 +395,6 @@ def stats_command(message):
         bot.send_message(message.chat.id, "⛔ Команда доступна только администратору")
         return
     
-    
     # Получаем статистику через функции из db
     total_users = db.get_total_users_count()
     total_keys = db.get_total_keys_count()
@@ -492,7 +493,7 @@ def query_handler(call):
     elif call.data.startswith("plan_"):
         plan_key = call.data.replace("plan_", "")
         data = PRICES[plan_key]
-        db.add_payment(uid, plan_key)
+        db.add_payment(uid, plan_key, data['price'])
         
         text = (
             f"{EMOJI['card']} *Оплата тарифа: {data['name']}*\n\n"
@@ -558,7 +559,9 @@ def query_handler(call):
     elif call.data.startswith("connect_"):
         u_uuid = call.data.replace("connect_", "")
         # Проверяем, что ключ существует
-        db.cursor.execute("SELECT end_date FROM keys WHERE uuid=? AND user_id=?", (u_uuid, uid))
+        db_cursor = db.conn.cursor()
+        db_cursor.execute("SELECT end_date FROM keys WHERE uuid=? AND user_id=?", (u_uuid, uid))
+        row = db_cursor.fetchone()
         if not db.cursor.fetchone():
             bot.answer_callback_query(call.id, "Ключ не найден")
             return
@@ -866,7 +869,9 @@ def auto_delete_loop():
         try:
             expired = db.get_all_expired_keys()
             for user_id, u_uuid in expired:
-                db.cursor.execute("SELECT * FROM keys WHERE uuid = ?", (u_uuid,))
+                db_cursor = db.conn.cursor()
+                db_cursor.execute("SELECT * FROM keys WHERE uuid = ?", (u_uuid,))
+                row = db_cursor.fetchone()
                 row = db.cursor.fetchone()
                 if row:
                     email = f"user_{user_id}_{u_uuid[:8]}"
@@ -892,7 +897,10 @@ def auto_delete_loop():
 def calculate_total_payments():
     """Считает общую сумму платежей"""
     try:
-        cursor.execute("""
+        # Используем курсор из модуля db
+        db_cursor = db.conn.cursor()
+        
+        db_cursor.execute("""
             SELECT plan_key, COUNT(*) as count 
             FROM payments 
             WHERE status = 'confirmed' 
@@ -900,7 +908,7 @@ def calculate_total_payments():
         """)
         
         total = 0
-        rows = cursor.fetchall()
+        rows = db_cursor.fetchall()
         
         for plan_key, count in rows:
             if plan_key in PRICES:  # PRICES из config.py
