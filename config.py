@@ -16,6 +16,7 @@ PANEL_PASS = "maga2192242"  # Введите ваш пароль от панел
 INBOUND_ID = 4  # ID вашего Reality-подключения в списке Inbounds
 SUB_PORT = 2096
 SUB_PATH = "/sub/"   # обязательно с / в конце
+SUB_BASE_URL = "https://31.130.131.214:2096"
 # Реквизиты
 PAY_PHONE = "79283376737"
 PAY_BANK = "Озон"
