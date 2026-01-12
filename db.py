@@ -94,7 +94,7 @@ def add_key(user_id, u_uuid, sid, days):
     
     cursor.execute("""
         INSERT INTO keys (user_id, uuid, sid, days, end_date, created_at, is_active)
-        VALUES (?, ?, ?, ?, ?, ?, 1)  # ← убрали start_date
+        VALUES (?, ?, ?, ?, ?, ?, 1)
     """, (user_id, u_uuid, sid, days, end_date, created_at))
     
     conn.commit()
