@@ -775,16 +775,17 @@ def auto_delete_loop():
                     #deleted = delete_user_from_xray(email)
                     #if deleted:
                         #db.delete_key_by_uuid(u_uuid)
-                        try:
-                            bot.send_message(user_id,
-                                f"{EMOJI['cross']} *Срок действия ключа истек*\n\n"
-                                f"{EMOJI['info']} Ключ был автоматически удален.\n"
-                                f"{EMOJI['buy']} Приобретите новый ключ в разделе «Купить VPN»\n"
-                                f"{EMOJI['friends']} Или пригласите друга и получите +{REFERRAL_REWARD_DAYS} дней!",
-                                parse_mode="Markdown"
-                            )
-                        except:
-                            pass
+                    try:
+                        bot.send_message(
+                            user_id,
+                            f"{EMOJI['cross']} *Срок действия ключа истек*\n\n"
+                            f"{EMOJI['info']} Ключ был автоматически удален.\n"
+                            f"{EMOJI['buy']} Приобретите новый ключ в разделе «Купить VPN»\n"
+                            f"{EMOJI['friends']} Или пригласите друга и получите +{REFERRAL_REWARD_DAYS} дней!",
+                            parse_mode="Markdown"
+                        )
+                    except:
+                        pass
         except Exception as e:
             print(f"[CLEANUP ERROR] {e}")
         time.sleep(1800)
