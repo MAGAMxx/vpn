@@ -112,8 +112,6 @@ def add_key(user_id, u_uuid, sid, days):
 
 def get_active_key(user_id):
     """Получает активный ключ пользователя"""
-    print(f"DEBUG get_active_key: user_id={user_id}")
-    
     cursor.execute("""
         SELECT * FROM keys
         WHERE user_id = ?
@@ -123,33 +121,11 @@ def get_active_key(user_id):
     """, (user_id,))
     
     row = cursor.fetchone()
-    
-    if row:
-        print(f"DEBUG: Найден ключ - row={row}")
-        # Проверяем формат end_date
-        end_date_index = 6  # Индекс end_date в результате
-        print(f"DEBUG: end_date={row[end_date_index]}, тип={type(row[end_date_index])}")
-    
     if not row:
-        print(f"DEBUG: Ключ не найден для user_id={user_id}")
         return None
     
-    # Преобразуем даты
-    row_list = list(row)
-    try:
-        # Пропускаем конвертацию, если дата уже в правильном формате
-        if row_list[6] and isinstance(row_list[6], str):
-            if '-' in row_list[6] and ':' in row_list[6]:  # Проверяем, это дата ISO?
-                row_list[6] = datetime.fromisoformat(row_list[6])
-            else:
-                print(f"DEBUG: Неправильный формат даты: {row_list[6]}")
-                return None
-    except (ValueError, TypeError, IndexError) as e:
-        print(f"Ошибка преобразования дат: {e}")
-        print(f"DEBUG: Проблемная строка: {row}")
-        return None
-    
-    return tuple(row_list)
+    # Просто возвращаем как есть, без преобразования дат
+    return row
     
 def get_keys(user_id):
     cursor.execute("""
