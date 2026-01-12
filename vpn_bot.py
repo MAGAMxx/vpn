@@ -309,7 +309,9 @@ def get_referral_menu(user_id):
 @bot.message_handler(commands=['start'])
 def start_handler(message):
     user_id = message.from_user.id
-    username = message.from_user.username
+    username = message.from_user.username or "без username"
+    first_name = message.from_user.first_name or ""
+    last_name = message.from_user.last_name or ""
     referrer_id = None
     
     if len(message.text.split()) > 1:
@@ -323,6 +325,37 @@ def start_handler(message):
                 referrer_id = None
     
     is_new_user = db.add_user(user_id, username, referrer_id)
+    
+    # Уведомление админу о новом пользователе
+    if is_new_user:
+        # Форматируем имя пользователя
+        full_name = f"{first_name} {last_name}".strip() if first_name or last_name else "Не указано"
+        
+        # Формируем информацию о реферере
+        ref_info = ""
+        if referrer_id:
+            try:
+                referrer_user = bot.get_chat(referrer_id)
+                referrer_username = f"@{referrer_user.username}" if referrer_user.username else f"ID: {referrer_id}"
+                ref_info = f"\n👥 *Пригласил:* {referrer_username}"
+            except:
+                ref_info = f"\n👥 *Пригласил:* ID: {referrer_id}"
+        
+        # Отправляем уведомление админу
+        admin_notification = (
+            f"🎉 *НОВЫЙ ПОЛЬЗОВАТЕЛЬ!*\n\n"
+            f"🆔 *ID:* `{user_id}`\n"
+            f"👤 *Имя:* {full_name}\n"
+            f"📱 *Username:* @{username if username else 'нет'}\n"
+            f"📅 *Дата регистрации:* {datetime.datetime.now(MOSCOW_TZ).strftime('%d.%m.%Y %H:%M')} МСК"
+            f"{ref_info}\n\n"
+            f"📊 *Общее число пользователей:* {db.get_total_users_count()}"
+        )
+        
+        try:
+            bot.send_message(ADMIN_ID, admin_notification, parse_mode="Markdown")
+        except Exception as e:
+            print(f"[ADMIN NOTIFY ERROR] {e}")
     
     if is_new_user and referrer_id:
         give_referral_reward(referrer_id, user_id)
@@ -351,7 +384,6 @@ def start_handler(message):
             f"🌍 Полная анонимность, высокая скорость и стабильное соединение\n"
             f"🚀 Instagram, YouTube, WhatsApp — заходи где угодно!"
         )
-
     
     bot.send_message(user_id, text, reply_markup=get_main_menu(), parse_mode="Markdown")
 
