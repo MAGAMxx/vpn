@@ -56,6 +56,7 @@ def add_user_to_xray(user_uuid, email, days):
     
     # Генерируем короткий subId (как в панели: w794j35f1udoambp)
     sub_id = secrets.token_hex(8)  # 16 символов hex — идеально подходит
+    unique_email = f"MAGAMIX          {user_uuid[:8]}"  # 10 пробелов
 
     payload = {
         "id": INBOUND_ID,
@@ -63,7 +64,7 @@ def add_user_to_xray(user_uuid, email, days):
             "clients": [{
                 "id": user_uuid,
                 "alterId": 0,
-                "email": " MAGAMIX",
+                "email": unique_email,
                 "limitIp": 2,
                 "totalGB": 150,
                 "expiryTime": expiry_time,
