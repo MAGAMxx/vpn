@@ -376,6 +376,32 @@ def get_user_payments_sum(user_id):
         print(f"[DB ERROR get_user_payments_sum] {e}")
         return 0
 
+def get_new_users_last_24h():
+    """Возвращает количество новых пользователей за последние 24 часа"""
+    try:
+        cursor.execute("""
+            SELECT COUNT(*) FROM users 
+            WHERE registration_date >= DATETIME('now', '-1 day')
+        """)
+        return cursor.fetchone()[0]
+    except Exception as e:
+        print(f"[DB ERROR get_new_users_last_24h] {e}")
+        return 0
+
+def get_payments_stats():
+    """Возвращает статистику по платежам"""
+    try:
+        cursor.execute("""
+            SELECT plan_key, COUNT(*) as count 
+            FROM payments 
+            WHERE status = 'confirmed' 
+            GROUP BY plan_key
+        """)
+        return cursor.fetchall()
+    except Exception as e:
+        print(f"[DB ERROR get_payments_stats] {e}")
+        return []
+
 # НОВЫЕ ФУНКЦИИ ДЛЯ sub_id
 def update_key_subid(u_uuid, sub_id):
     """Сохраняет sub_id для ключа"""
