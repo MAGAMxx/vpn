@@ -103,23 +103,23 @@ def get_active_key(user_id):
     cursor.execute("""
         SELECT * FROM keys
         WHERE user_id = ?
+        AND is_active = 1
         AND end_date > DATETIME('now')
-        ORDER BY end_date DESC
         LIMIT 1
     """, (user_id,))
-    
+   
     row = cursor.fetchone()
     if not row:
         return None
-    
+   
     row_list = list(row)
     try:
-        # end_date на 5 позиции (0-id, 1-user_id, 2-uuid, 3-sid, 4-days, 5-end_date...)
-        row_list[5] = datetime.datetime.fromisoformat(row_list[5])  # end_date
-    except (ValueError, TypeError, IndexError) as e:
+        row_list[3] = datetime.datetime.fromisoformat(row_list[3])
+        row_list[4] = datetime.datetime.fromisoformat(row_list[4])
+    except (ValueError, TypeError) as e:
         print(f"Ошибка преобразования дат: {e}")
         return None
-    
+   
     return tuple(row_list)
 
 def get_keys(user_id):
