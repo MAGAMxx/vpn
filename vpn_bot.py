@@ -41,11 +41,21 @@ REFERRAL_REWARD_DAYS = 5 # +5 дней за каждого друга
 def xui_login():
     try:
         login_url = f"{PANEL_URL}/{PANEL_PATH}/login"
-        r = session.post(login_url, data={"username": PANEL_USER, "password": PANEL_PASS}, verify=False, timeout=10)
+        # Добавляем игнорирование SSL ошибок
+        r = session.post(
+            login_url, 
+            data={"username": PANEL_USER, "password": PANEL_PASS}, 
+            verify=False,  # Игнорируем проверку SSL
+            timeout=10,
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        )
         return r.status_code == 200
     except Exception as e:
         print(f"[LOGIN ERROR] {e}")
         return False
+
 
 def generate_subscription_link(sub_id):
     return f"https://31.130.131.214:{SUB_PORT}{SUB_PATH}{sub_id}"
