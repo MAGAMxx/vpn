@@ -339,8 +339,8 @@ def start_handler(message):
             db.update_key_subid(u_uuid, sub_id)
             text = (
                 f"{EMOJI['crown']} *Добро пожаловать!* {EMOJI['fire']}\n\n"
-                f"{EMOJI['star']} *Триал 3 дня выдан!*\n"
-                f"{EMOJI['key']} Ключ в «Мои ключи»\n\n"
+                f"{EMOJI['star']} *Бонусные 3 дня выданы!*\n"
+                f"{EMOJI['key']} Подключиться можно в «Мои ключи»\n\n"
                 f"{EMOJI['gift']} Приглашай друзей — +{REFERRAL_REWARD_DAYS} дней!"
             )
         else:
@@ -408,7 +408,7 @@ def query_handler(call):
         
         kb = InlineKeyboardMarkup()
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад к тарифам", callback_data="buy"))
-        kb.add(InlineKeyboardButton(f"{EMOJI['home']} В главное меню", callback_data="main"))
+        #kb.add(InlineKeyboardButton(f"{EMOJI['home']} В главное меню", callback_data="main"))
         
         bot.edit_message_text(text, uid, call.message.id,
                             reply_markup=kb, parse_mode="Markdown")
@@ -453,7 +453,7 @@ def query_handler(call):
             callback_data=f"show_key_{u_uuid}"
         ))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
-        kb.add(InlineKeyboardButton(f"{EMOJI['home']} Главное", callback_data="main"))
+        #kb.add(InlineKeyboardButton(f"{EMOJI['home']} Главное", callback_data="main"))
         
         bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
     
@@ -487,7 +487,7 @@ def query_handler(call):
         kb.add(InlineKeyboardButton("Подключиться ⚡", url=deeplink))
         #kb.add(InlineKeyboardButton(f"{EMOJI['copy']} Скопировать ключ", callback_data=f"copy_{u_uuid}"))
         #kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
-        kb.add(InlineKeyboardButton(f"{EMOJI['home']} Главное", callback_data="main"))
+        kb.add(InlineKeyboardButton(f"{EMOJI['home']} Главное Меню", callback_data="main"))
     
         bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
     
@@ -580,69 +580,116 @@ def query_handler(call):
         
         bot.edit_message_text(text, uid, call.message.id,
                             reply_markup=kb, parse_mode="Markdown")
+
+    elif call.data.startswith("adm_decline_"):
+        if call.from_user.id != ADMIN_ID:
+            bot.answer_callback_query(call.id, "⛔ Доступ запрещен!")
+            return
+    
+        target_id = int(call.data.split("_")[2])
+    
+    # Можно добавить логику возврата статуса в pending или уведомление пользователю
+        try:
+            bot.send_message(target_id, 
+                f"{EMOJI['cross']} *Оплата отклонена.*\n\n"
+                f"Проверьте реквизиты и отправьте новый чек.",
+                parse_mode="Markdown"
+            )
+            bot.answer_callback_query(call.id, "Оплата отклонена")
+            bot.edit_message_text("Оплата отклонена", ADMIN_ID, call.message.id)
+        except Exception as e:
+            print(f"Ошибка отклонения: {e}")
     
     elif call.data.startswith("adm_ok_"):
         if call.from_user.id != ADMIN_ID:
             bot.answer_callback_query(call.id, "⛔ Доступ запрещен!")
             return
-        
-        target_id = int(call.data.split("*")[2])
+    
+        target_id = int(call.data.split("_")[2])  # ← исправлено: split("_")
         plan_key = db.get_last_pending_plan(target_id)
         if not plan_key:
             bot.send_message(ADMIN_ID, "Нет ожидающих платежей.")
             return
-        
+    
         days = PRICES[plan_key]['days']
         u_uuid = str(uuid.uuid4())
-        email = f"user*{target_id}_{int(time.time())}"
-        
-        if add_user_to_xray(u_uuid, email, days):
+        email = f"user_{target_id}_{int(time.time())}"
+    
+        sub_id = add_user_to_xray(u_uuid, email, days)
+        if sub_id:
             db.add_key(target_id, u_uuid, SID, days)
-            link = generate_vless_link(u_uuid)
-            
+            db.update_key_subid(u_uuid, sub_id)
+        
+            # Ссылка-подписка (или VLESS, если хочешь)
+            sub_link = generate_subscription_link(sub_id)
+        
             success_text = (
                 f"{EMOJI['check']} *Оплата подтверждена!*\n\n"
                 f"{EMOJI['key']} *Ваш ключ на {days} дней:*\n"
-                f"{link}\n\n"
+                f"`{sub_link}`\n\n"
                 f"{EMOJI['info']} *Инструкция:*\n"
-                f"1. Скопируйте ссылку выше\n"
-                f"2. Откройте Happ Plus / Hiddify\n"
-                f"3. Нажмите «+» → «Импорт из буфера обмена»\n"
+                f"1. Откройте Happ Plus / Hiddify\n"
+                f"2. Нажмите «+» → «Добавить подписку»\n"
+                f"3. Вставьте ссылку выше\n"
                 f"4. Наслаждайтесь VPN! {EMOJI['rocket']}"
             )
             
             bot.send_message(target_id, success_text, parse_mode="Markdown")
-            
-            admin_text = f"{EMOJI['check']} Ключ выдан пользователю {target_id}"
+        
+            # Уведомление админу
+            admin_text = (
+                f"{EMOJI['check']} *Ключ выдан!*\n"
+                f"Пользователь: {target_id}\n"
+                f"Тариф: {PRICES[plan_key]['name']} ({days} дней)\n"
+                f"Sub ID: {sub_id}"
+            )
             bot.edit_message_text(admin_text, ADMIN_ID, call.message.id)
         else:
-            bot.send_message(ADMIN_ID, f"{EMOJI['cross']} Ошибка при связи с API 3X-UI")
+            bot.send_message(ADMIN_ID, f"{EMOJI['cross']} Ошибка при создании ключа")
 
 # --- Приём чеков ---
 @bot.message_handler(content_types=['photo'])
 def handle_receipt(message):
     uid = message.from_user.id
+    username = message.from_user.username or "скрыт"
+    
+    # Получаем последний pending план этого пользователя
+    plan_key = db.get_last_pending_plan(uid)
+    if not plan_key:
+        bot.send_message(uid, "У вас нет ожидающего платежа.")
+        return
+    
+    data = PRICES[plan_key]
+    price = data['price']
+    name = data['name']
+    days = data['days']
     
     bot.send_message(uid,
         f"{EMOJI['check']} *Чек принят!*\n\n"
-        f"{EMOJI['time']} Проверка займет несколько минут.\n"
-        f"{EMOJI['info']} После проверки ключ придет автоматически.",
+        f"{EMOJI['time']} Проверка займёт несколько минут.\n"
+        f"{EMOJI['info']} После проверки ключ придёт автоматически.",
         parse_mode="Markdown"
     )
     
+    # Пересылаем чек админу
     bot.forward_message(ADMIN_ID, message.chat.id, message.id)
     
+    # Красивое сообщение админу с полной инфой
     kb = InlineKeyboardMarkup()
-    kb.add(InlineKeyboardButton(f"{EMOJI['check']} Подтвердить оплату",
-                               callback_data=f"adm_ok_{uid}"))
+    kb.add(InlineKeyboardButton(f"{EMOJI['check']} Подтвердить оплату", callback_data=f"adm_ok_{uid}"))
+    kb.add(InlineKeyboardButton(f"{EMOJI['cross']} Отклонить", callback_data=f"adm_decline_{uid}"))  # ← новая кнопка, добавь обработку ниже
     
-    bot.send_message(ADMIN_ID,
-        f"{EMOJI['money']} *Новый чек от пользователя*\n\n"
-        f"ID: {uid}\n"
-        f"Username: @{message.from_user.username or 'скрыт'}",
-        reply_markup=kb,
-        parse_mode="Markdown"
+    admin_text = (
+        f"{EMOJI['money']} *Новый чек от пользователя!*\n\n"
+        f"👤 **Пользователь:** ID {uid} | @{username}\n"
+        f"💳 **Тариф:** {name} ({days} дней)\n"
+        f"💰 **Сумма:** {price}₽\n"
+        f"📅 **Дата/время:** {datetime.datetime.now(MOSCOW_TZ).strftime('%d.%m.%Y %H:%M')} МСК\n"
+        f"Статус: Ожидает подтверждения\n\n"
+        f"Чек прикреплён выше ↓"
     )
+    
+    bot.send_message(ADMIN_ID, admin_text, reply_markup=kb, parse_mode="Markdown")
 
 # --- Очистка просроченных ---
 def auto_delete_loop():
