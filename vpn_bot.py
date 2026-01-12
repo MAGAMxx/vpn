@@ -63,7 +63,7 @@ def add_user_to_xray(user_uuid, email, days)
            "clients": [{
                "id": user_uuid,
                "alterId": 0,
-               "email": "MAGAMIX",  # или ваша переменная с email
+               "email": "MAGAMIX"     email,  # или ваша переменная с email
                "limitIp": 2,
                "totalGB": 150,  # или 0
                "expiryTime": expiry_time,
