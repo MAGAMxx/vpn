@@ -249,7 +249,7 @@ def get_main_menu():
     )
     kb.add(
         InlineKeyboardButton(f"{EMOJI['friends']} Пригласить друга", callback_data="referral"),
-        InlineKeyboardButton(f"{EMOJI['support']} Поддержка", url="https://t.me/nejnayatp3")
+        InlineKeyboardButton(f"{EMOJI['support']} Поддержка", url="https://t.me/MAGAMIX_support")
     )
     kb.add(InlineKeyboardButton(f"{EMOJI['info']} Информация", callback_data="info"))
     return kb
@@ -646,13 +646,12 @@ def query_handler(call):
             f"2. Получите ключ в «Мои ключи»\n"
             f"3. Настройте приложение за 2 минуты\n"
             f"4. Наслаждайтесь свободным интернетом!\n\n"
-            f"{EMOJI['support']} *Техническая поддержка:* @nejnayatp3"
         )
         
         kb = InlineKeyboardMarkup()
         kb.add(InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"))
         kb.add(InlineKeyboardButton(f"{EMOJI['friends']} Пригласить друга", callback_data="referral"))
-        kb.add(InlineKeyboardButton(f"{EMOJI['support']} Поддержка", url="https://t.me/nejnayatp3"))
+        kb.add(InlineKeyboardButton(f"{EMOJI['support']} Поддержка", url="https://t.me/MAGAMIX_support"))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
         
         bot.edit_message_text(text, uid, call.message.id,
