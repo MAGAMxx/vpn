@@ -500,8 +500,12 @@ def query_handler(call):
             )
         else:
             u_uuid = call.data.replace("copy_", "")
-            link = generate_vless_link(u_uuid)
-            bot.answer_callback_query(call.id, "✅ Ключ скопирован! Вставьте в приложение", show_alert=True)
+            sub_id = db.get_key_subid(u_uuid)
+            if sub_id:
+                sub_link = generate_subscription_link(sub_id)
+                bot.answer_callback_query(call.id, f"✅ Ссылка-подписка скопирована!\n{sub_link}", show_alert=True)
+            else:
+                bot.answer_callback_query(call.id, "Ссылка не найдена", show_alert=True)
     
     elif call.data == "referral":
         kb, ref_link, ref_stats = get_referral_menu(uid)
