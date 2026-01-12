@@ -137,8 +137,9 @@ def delete_user_from_xray(email):
 
 # --- Вспомогательные функции ---
 def generate_vless_link(u_uuid):
+    # Экранируем специальные символы для Markdown
     return (f"vless://{u_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality"
-            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#⚡MAGAMIX_VPN | НИДЕРЛАНДЫ ")
+            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#⚡MAGAMIX_VPN | НИДЕРЛАНДЫ")
 
 def generate_happ_deeplink(sub_id):
     if not sub_id:
@@ -452,32 +453,34 @@ def query_handler(call):
         u_uuid = call.data.replace("show_key_", "")
         db.cursor.execute("SELECT end_date FROM keys WHERE uuid=? AND user_id=?", (u_uuid, uid))
         row = db.cursor.fetchone()
-        
+    
         if not row:
             bot.answer_callback_query(call.id, "Ключ не найден")
             return
-        
+    
         end_date = datetime.datetime.fromisoformat(str(row[0]))
         remaining = get_remaining_time_str(end_date)
         link = generate_vless_link(u_uuid)
         end_date_formatted = end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M') + ' МСК'
         sub_id = db.get_key_subid(u_uuid) or u_uuid # fallback на uuid, если sub_id None
-        
+    
+        # Используем MarkdownV2 для правильного экранирования
         text = (
             f"{EMOJI['key']} *Детали ключа*\n\n"
             f"{EMOJI['time']} *Осталось:* **{remaining}**\n"
             f"*До:* {end_date_formatted}\n\n"
-            f"{EMOJI['link']} *Обычная ссылка:*\n{link}\n\n"
+            f"{EMOJI['link']} *Обычная ссылка:*\n"
+            f"`{link}`\n\n"  # Используем код для ссылки
             f"Нажмите кнопку ниже — Happ откроется и добавит подписку автоматически!"
         )
-        
+    
         kb = InlineKeyboardMarkup()
         deeplink = f"https://magamix.onrender.com/connect/{sub_id}"
         kb.add(InlineKeyboardButton("Открыть в Happ одним кликом", url=deeplink))
         kb.add(InlineKeyboardButton(f"{EMOJI['copy']} Скопировать ключ", callback_data=f"copy_{u_uuid}"))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
         kb.add(InlineKeyboardButton(f"{EMOJI['home']} Главное", callback_data="main"))
-        
+    
         bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
     
     elif call.data.startswith("copy_"):
