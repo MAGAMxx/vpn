@@ -859,6 +859,28 @@ def auto_delete_loop():
             print(f"[CLEANUP ERROR] {e}")
         time.sleep(1800)
 
+def calculate_total_payments():
+    """Считает общую сумму платежей"""
+    try:
+        cursor.execute("""
+            SELECT plan_key, COUNT(*) as count 
+            FROM payments 
+            WHERE status = 'confirmed' 
+            GROUP BY plan_key
+        """)
+        
+        total = 0
+        rows = cursor.fetchall()
+        
+        for plan_key, count in rows:
+            if plan_key in PRICES:  # PRICES из config.py
+                total += PRICES[plan_key]['price'] * count
+                
+        return total
+    except Exception as e:
+        print(f"[CALCULATE PAYMENTS ERROR] {e}")
+        return 0
+
 
 def notify_expiry_warning():
     while True:
