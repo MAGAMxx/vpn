@@ -75,16 +75,16 @@ def add_user_to_xray(user_uuid, email, days):
         r = session.post(url, json=payload, verify=False, timeout=15)
         response_data = r.json()
 
-        if response_data.get("success"):
+                if response_data.get("success"):
             # Принудительно запрашиваем подписку, чтобы 3X-UI сгенерировал subId
-            sub_url = f"https://31.130.131.214:{SUB_PORT}{SUB_PATH}{user_uuid}"  # используем uuid как subId
+            sub_url = f"https://31.130.131.214:{SUB_PORT}{SUB_PATH}{user_uuid}"
             try:
                 session.get(sub_url, verify=False, timeout=5)
                 print(f"[INFO] Запросил подписку для генерации subId: {sub_url}")
             except Exception as e:
                 print(f"[WARNING] Не удалось запросить подписку: {e}")
 
-            # Теперь получаем свежие настройки inbound
+            # Получаем свежие настройки inbound
             get_url = f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/get/{INBOUND_ID}"
             r_get = session.get(get_url, verify=False, timeout=10)
             data = r_get.json()
