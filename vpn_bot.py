@@ -72,7 +72,7 @@ def add_user_to_xray(user_uuid, email, days):
                 "enable": True,
                 "tgId": "",
                 "subId": sub_id, 
-                "remark": "⚡MAGAMIX Нидерланды 🇳🇱"
+                "remark": "Нидерланды 🇳🇱"
             }]
         })
     }
