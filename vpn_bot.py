@@ -180,7 +180,6 @@ def give_referral_reward(referrer_id, referred_id):
         """, (referrer_id, referred_id))
         row = db_cursor.fetchone()
         
-        row = db.cursor.fetchone()
         if row and row[0] == 1:
             return False
         
@@ -558,11 +557,13 @@ def query_handler(call):
 
     elif call.data.startswith("connect_"):
         u_uuid = call.data.replace("connect_", "")
+        
         # Проверяем, что ключ существует
         db_cursor = db.conn.cursor()
         db_cursor.execute("SELECT end_date FROM keys WHERE uuid=? AND user_id=?", (u_uuid, uid))
         row = db_cursor.fetchone()
-        if not db.cursor.fetchone():
+        
+        if not row:
             bot.answer_callback_query(call.id, "Ключ не найден")
             return
     
@@ -632,12 +633,14 @@ def query_handler(call):
     
     elif call.data.startswith("show_key_"):
         u_uuid = call.data.replace("show_key_", "")
-        db.cursor.execute("SELECT end_date FROM keys WHERE uuid=? AND user_id=?", (u_uuid, uid))
-        row = db.cursor.fetchone()
+        db_cursor = db.conn.cursor()
+        db_cursor.execute("SELECT end_date FROM keys WHERE uuid=? AND user_id=?", (u_uuid, uid))
+        row = db_cursor.fetchone()
     
         if not row:
             bot.answer_callback_query(call.id, "Ключ не найден")
             return
+    
     
         end_date = datetime.datetime.fromisoformat(str(row[0]))
         remaining = get_remaining_time_str(end_date)
@@ -872,13 +875,10 @@ def auto_delete_loop():
                 db_cursor = db.conn.cursor()
                 db_cursor.execute("SELECT * FROM keys WHERE uuid = ?", (u_uuid,))
                 row = db_cursor.fetchone()
-                row = db.cursor.fetchone()
                 if row:
                     email = f"user_{user_id}_{u_uuid[:8]}"
                     
-                    #deleted = delete_user_from_xray(email)
-                    #if deleted:
-                        #db.delete_key_by_uuid(u_uuid)
+
                     try:
                         bot.send_message(
                             user_id,
