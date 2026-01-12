@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS keys (
     start_date TEXT,
     end_date TEXT,
     is_active INTEGER DEFAULT 1,
+    sub_id TEXT,  -- НОВАЯ КОЛОНКА для sub_id подписки Happ
     FOREIGN KEY (user_id) REFERENCES users(id)
 )
 ''')
@@ -66,54 +67,50 @@ conn.commit()
 
 def add_user(uid, username, referrer_id=None):
     cursor.execute("""
-        INSERT OR IGNORE INTO users (id, username, referrer_id) 
+        INSERT OR IGNORE INTO users (id, username, referrer_id)
         VALUES (?, ?, ?)
     """, (uid, username, referrer_id))
-    
-    # Если пользователь новый и есть реферер, добавляем запись в referrals
+   
     if cursor.rowcount > 0 and referrer_id:
         cursor.execute("""
-            INSERT OR IGNORE INTO referrals (referrer_id, referred_id) 
+            INSERT OR IGNORE INTO referrals (referrer_id, referred_id)
             VALUES (?, ?)
         """, (referrer_id, uid))
-    
+   
     conn.commit()
     return cursor.rowcount > 0
+    
 
 def add_key(user_id, u_uuid, sid, days):
-    """Добавляем ключ с датами в формате ISO строки"""
     start_date = datetime.datetime.now().isoformat()
     end_date = (datetime.datetime.now() + datetime.timedelta(days=days)).isoformat()
-    
-    # Деактивируем старые ключи
+   
     cursor.execute("""
-        UPDATE keys SET is_active = 0 
+        UPDATE keys SET is_active = 0
         WHERE user_id = ? AND is_active = 1
     """, (user_id,))
-    
+   
     cursor.execute("""
         INSERT INTO keys (user_id, uuid, sid, start_date, end_date, is_active)
         VALUES (?, ?, ?, ?, ?, 1)
     """, (user_id, u_uuid, sid, start_date, end_date))
-    
+   
     conn.commit()
     return cursor.lastrowid
 
 def get_active_key(user_id):
-    """Получаем активный ключ пользователя"""
     cursor.execute("""
-        SELECT * FROM keys 
-        WHERE user_id = ? 
+        SELECT * FROM keys
+        WHERE user_id = ?
         AND is_active = 1
         AND end_date > DATETIME('now')
         LIMIT 1
     """, (user_id,))
-    
+   
     row = cursor.fetchone()
     if not row:
         return None
-    
-    # Преобразуем даты
+   
     row_list = list(row)
     try:
         row_list[3] = datetime.datetime.fromisoformat(row_list[3])
@@ -121,20 +118,19 @@ def get_active_key(user_id):
     except (ValueError, TypeError) as e:
         print(f"Ошибка преобразования дат: {e}")
         return None
-    
+   
     return tuple(row_list)
 
 def get_keys(user_id):
-    """Возвращает все ключи пользователя (не только активные)"""
     cursor.execute("""
-        SELECT * FROM keys 
-        WHERE user_id = ? 
+        SELECT * FROM keys
+        WHERE user_id = ?
         ORDER BY start_date DESC
     """, (user_id,))
-    
+   
     rows = cursor.fetchall()
     converted = []
-    
+   
     for row in rows:
         row_list = list(row)
         try:
@@ -143,37 +139,36 @@ def get_keys(user_id):
         except (ValueError, TypeError) as e:
             print(f"Ошибка преобразования дат: {e}")
             continue
-        
+       
         converted.append(tuple(row_list))
-    
+   
     return converted
 
 def extend_key_days(user_id, days_to_add):
-    """Продлевает активный ключ на указанное количество дней"""
     cursor.execute("""
-        SELECT uuid, end_date FROM keys 
-        WHERE user_id = ? 
+        SELECT uuid, end_date FROM keys
+        WHERE user_id = ?
         AND is_active = 1
         AND end_date > DATETIME('now')
         LIMIT 1
     """, (user_id,))
-    
+   
     row = cursor.fetchone()
     if not row:
         return False
-    
+   
     uuid_val, end_date_str = row
     try:
         end_date = datetime.datetime.fromisoformat(end_date_str)
         new_end_date = end_date + datetime.timedelta(days=days_to_add)
         new_end_date_str = new_end_date.isoformat()
-        
+       
         cursor.execute("""
-            UPDATE keys 
-            SET end_date = ? 
+            UPDATE keys
+            SET end_date = ?
             WHERE uuid = ? AND user_id = ?
         """, (new_end_date_str, uuid_val, user_id))
-        
+       
         conn.commit()
         return True
     except (ValueError, TypeError) as e:
@@ -188,19 +183,17 @@ def create_key_if_none(user_id, u_uuid, sid, days):
     return False  # Ключ уже есть
 
 def add_referral_reward(referrer_id, referred_id, days_added):
-    """Добавляет запись о награде за реферала"""
     cursor.execute("""
         INSERT INTO referral_rewards (user_id, referral_id, days_added, reward_date)
         VALUES (?, ?, ?, ?)
     """, (referrer_id, referred_id, days_added, datetime.datetime.now().isoformat()))
-    
-    # Отмечаем, что награда выдана
+   
     cursor.execute("""
-        UPDATE referrals 
-        SET reward_given = 1 
+        UPDATE referrals
+        SET reward_given = 1
         WHERE referrer_id = ? AND referred_id = ?
     """, (referrer_id, referred_id))
-    
+   
     conn.commit()
 
 def get_referrals_count(user_id):
@@ -212,15 +205,14 @@ def get_referrals_count(user_id):
     return cursor.fetchone()[0]
 
 def get_referrals_stats(user_id):
-    """Получает статистику по рефералам"""
     cursor.execute("""
-        SELECT 
+        SELECT
             COUNT(*) as total,
             SUM(CASE WHEN reward_given = 1 THEN 1 ELSE 0 END) as rewarded
-        FROM referrals 
+        FROM referrals
         WHERE referrer_id = ?
     """, (user_id,))
-    
+   
     row = cursor.fetchone()
     return {
         'total': row[0] if row else 0,
@@ -287,22 +279,36 @@ def add_payment(user_id, plan_key):
 
 def get_last_pending_plan(user_id):
     cursor.execute("""
-        SELECT plan_key FROM payments 
-        WHERE user_id = ? 
-        AND status = 'pending' 
-        ORDER BY timestamp DESC 
+        SELECT plan_key FROM payments
+        WHERE user_id = ?
+        AND status = 'pending'
+        ORDER BY timestamp DESC
         LIMIT 1
     """, (user_id,))
-    
+   
     row = cursor.fetchone()
     if row:
         cursor.execute("""
-            UPDATE payments 
-            SET status = 'approved' 
-            WHERE user_id = ? 
-            AND plan_key = ? 
+            UPDATE payments
+            SET status = 'approved'
+            WHERE user_id = ?
+            AND plan_key = ?
             AND status = 'pending'
         """, (user_id, row[0]))
         conn.commit()
         return row[0]
     return None
+
+# НОВЫЕ ФУНКЦИИ ДЛЯ sub_id
+def update_key_subid(u_uuid, sub_id):
+    """Сохраняет sub_id для ключа"""
+    cursor.execute("""
+        UPDATE keys SET sub_id = ? WHERE uuid = ?
+    """, (sub_id, u_uuid))
+    conn.commit()
+
+def get_key_subid(u_uuid):
+    """Возвращает sub_id по uuid ключа"""
+    cursor.execute("SELECT sub_id FROM keys WHERE uuid = ?", (u_uuid,))
+    row = cursor.fetchone()
+    return row[0] if row else None
