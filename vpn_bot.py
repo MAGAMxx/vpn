@@ -69,7 +69,7 @@ def add_user_to_xray(user_uuid, email, days):
                 "expiryTime": expiry_time,
                 "enable": True,
                 "tgId": "",
-                "subId": sub_id  
+                "subId": sub_id,
                 "remark": "MAGAMIX |Нидерланды"
             }]
         })
