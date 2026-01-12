@@ -481,8 +481,11 @@ def query_handler(call):
 
         kb = InlineKeyboardMarkup()
         if sub_id:
-            deeplink = generate_happ_deeplink(sub_id)
-            kb.add(InlineKeyboardButton("Подключиться", url=deeplink))
+            deeplink = f"https://magamix.onrender.com/connect/{sub_id}"
+            kb.add(InlineKeyboardButton(
+                "Подключиться",
+                url=deeplink  # ← теперь https, Telegram примет
+            ))
         kb.add(InlineKeyboardButton(f"{EMOJI['copy']} Скопировать ключ", callback_data=f"copy_{u_uuid}"))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
         #kb.add(InlineKeyboardButton(f"{EMOJI['home']} Главное", callback_data="main"))
