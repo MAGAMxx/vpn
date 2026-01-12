@@ -283,7 +283,6 @@ def get_instructions_menu(uuid_key=None):
     return kb
 
 def get_referral_menu(user_id):
-    """Меню реферальной системы"""
     kb = InlineKeyboardMarkup(row_width=1)
     
     # Генерируем реферальную ссылку
@@ -293,7 +292,7 @@ def get_referral_menu(user_id):
     ref_stats = db.get_referrals_stats(user_id)
     
     kb.add(InlineKeyboardButton(
-        #f"{EMOJI['invite']} Скопировать ссылку",
+        f"{EMOJI['invite']} Пригласить друга",
         callback_data=f"copy_ref_{user_id}"
     ))
     
@@ -303,7 +302,6 @@ def get_referral_menu(user_id):
     ))
     
     kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
-    kb.add(InlineKeyboardButton(f"{EMOJI['home']} В главное меню", callback_data="main"))
     
     return kb, ref_link, ref_stats
 
