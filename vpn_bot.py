@@ -63,14 +63,14 @@ def add_user_to_xray(user_uuid, email, days):
             "clients": [{
                 "id": user_uuid,
                 "alterId": 0,
-                "email": email,
+                "email": " MAGAMIX",
                 "limitIp": 2,
                 "totalGB": 0,
                 "expiryTime": expiry_time,
                 "enable": True,
                 "tgId": "",
                 "subId": sub_id  
-                "remark": "MAGAMIX |Нидерланды"
+                "remark": "⚡ MAGAMIX VPN | Нидерланды"
             }]
         })
     }
