@@ -169,7 +169,7 @@ def get_remaining_time_str(end_date):
     return f"{hours} ч."
 
 def generate_referral_link(user_id):
-    return f"https://t.me/{bot.get_me().username}?start=ref{user_id}"
+    return f"https://t.me/MAGAMIX_VPN_bot?start=ref{user_id}"
 
 def give_referral_reward(referrer_id, referred_id):
     try:
@@ -245,7 +245,7 @@ def get_main_menu():
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
         InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"),
-        InlineKeyboardButton(f"{EMOJI['key']} Мои ключи", callback_data="my_keys")
+        InlineKeyboardButton(f"{EMOJI['key']} Мой ключ", callback_data="my_key")
     )
     kb.add(
         InlineKeyboardButton(f"{EMOJI['friends']} Пригласить друга", callback_data="referral"),
@@ -413,24 +413,24 @@ def query_handler(call):
         bot.edit_message_text(text, uid, call.message.id,
                             reply_markup=kb, parse_mode="Markdown")
     
-    elif call.data == "my_keys":
+    elif call.data == "my_key":
         keys = db.get_keys(uid)
         active_key = db.get_active_key(uid)
-        
+    
         if not active_key:
-            text = f"{EMOJI['key']} *Нет активных ключей* {EMOJI['cross']}"
+            text = f"{EMOJI['key']} *У вас нет активного ключа* {EMOJI['cross']}"
             kb = InlineKeyboardMarkup()
             kb.add(InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"))
             kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
             bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
             return
-        
+    
         u_uuid = active_key[1]
         end_date = active_key[4]
         end_date_aware = MOSCOW_TZ.localize(end_date)
         now_aware = datetime.datetime.now(MOSCOW_TZ)
         delta = end_date_aware - now_aware
-        
+    
         if delta.total_seconds() <= 0:
             text = f"{EMOJI['key']} *Ключ истёк* {EMOJI['cross']}"
             kb = InlineKeyboardMarkup()
@@ -438,23 +438,93 @@ def query_handler(call):
             kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
             bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
             return
-        
+    
         remaining = f"{delta.days} дн." if delta.days >= 1 else f"{int(delta.total_seconds() // 3600)} ч."
+        end_date_formatted = end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M') + ' МСК'
+    
         text = (
-            f"{EMOJI['key']} *Активный ключ*\n\n"
-            f"{EMOJI['time']} *Осталось:* **{remaining}**\n"
-            f"*До:* {end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y %H:%M')} МСК\n\n"
-            f"{EMOJI['info']} *Дальше:*"
+            f"🔑 *Детали ключа*\n\n"
+            f"⏰ *Осталось:* **{remaining}**\n"
+            f"До: {end_date_formatted}\n\n"
+            f"Нажмите «Подключиться» и следуйте инструкциям ↓"
         )
-        
+    
         kb = InlineKeyboardMarkup()
-        kb.add(InlineKeyboardButton(
-            f"{EMOJI['copy']} Получить ссылку",
-            callback_data=f"show_key_{u_uuid}"
-        ))
+        kb.add(InlineKeyboardButton("Подключиться ⚡", callback_data=f"connect_{u_uuid}"))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
-        #kb.add(InlineKeyboardButton(f"{EMOJI['home']} Главное", callback_data="main"))
-        
+    
+        bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
+
+    elif call.data.startswith("connect_"):
+        u_uuid = call.data.replace("connect_", "")
+        # Проверяем, что ключ существует
+        db.cursor.execute("SELECT end_date FROM keys WHERE uuid=? AND user_id=?", (u_uuid, uid))
+        if not db.cursor.fetchone():
+            bot.answer_callback_query(call.id, "Ключ не найден")
+            return
+    
+        text = (
+            f"Выберите ваше устройство:\n\n"
+            f"Нажмите кнопку ниже — бот отправит инструкцию и ссылку"
+        )
+    
+        kb = InlineKeyboardMarkup(row_width=2)
+        kb.add(
+            InlineKeyboardButton("📱 iPhone / iPad", callback_data=f"device_ios_{u_uuid}"),
+            InlineKeyboardButton("🤖 Android", callback_data=f"device_android_{u_uuid}")
+        )
+        kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="my_key"))
+    
+        bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
+
+    elif call.data.startswith("device_ios_"):
+        u_uuid = call.data.replace("device_ios_", "")
+        sub_id = db.get_key_subid(u_uuid)
+        if not sub_id:
+            bot.answer_callback_query(call.id, "Подписка не найдена")
+            return
+    
+        sub_link = generate_subscription_link(sub_id)
+        deeplink = generate_happ_deeplink(sub_id)
+    
+        text = (
+            f"📱 **Для iPhone / iPad**\n\n"
+            f"1. Нажмите кнопку «Установить» и скачайте приложение Happ\n"
+            f"2. После установки нажмите «Подключиться» — Happ откроется автоматически\n\n"
+            f"Установка: https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973\n\n"
+            f"Подключение:"
+        )
+    
+        kb = InlineKeyboardMarkup()
+        kb.add(InlineKeyboardButton("Установить", url="https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973"))
+        kb.add(InlineKeyboardButton("Подключиться ⚡", url=deeplink))
+        kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="my_key"))
+    
+        bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
+
+    elif call.data.startswith("device_android_"):
+        u_uuid = call.data.replace("device_android_", "")
+        sub_id = db.get_key_subid(u_uuid)
+        if not sub_id:
+            bot.answer_callback_query(call.id, "Подписка не найдена")
+            return
+    
+        sub_link = generate_subscription_link(sub_id)
+        deeplink = generate_happ_deeplink(sub_id)
+    
+        text = (
+            f"🤖 **Для Android**\n\n"
+            f"1. Нажмите кнопку «Установить» и скачайте приложение Happ\n"
+            f"2. После установки нажмите «Подключиться» — Happ откроется автоматически\n\n"
+            f"Установка: https://play.google.com/store/apps/details?id=com.happproxy&hl=ru\n\n"
+            f"Подключение:"
+        )
+    
+        kb = InlineKeyboardMarkup()
+        kb.add(InlineKeyboardButton("Установить", url="https://play.google.com/store/apps/details?id=com.happproxy&hl=ru"))
+        kb.add(InlineKeyboardButton("Подключиться ⚡", url=deeplink))
+        kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="my_key"))
+    
         bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
     
     elif call.data.startswith("show_key_"):
@@ -702,9 +772,9 @@ def auto_delete_loop():
                 if row:
                     email = f"user_{user_id}_{u_uuid[:8]}"
                     
-                    deleted = delete_user_from_xray(email)
-                    if deleted:
-                        db.delete_key_by_uuid(u_uuid)
+                    #deleted = delete_user_from_xray(email)
+                    #if deleted:
+                        #db.delete_key_by_uuid(u_uuid)
                         try:
                             bot.send_message(user_id,
                                 f"{EMOJI['cross']} *Срок действия ключа истек*\n\n"
