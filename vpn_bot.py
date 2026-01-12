@@ -519,22 +519,31 @@ def query_handler(call):
     
     elif call.data.startswith("show_key_"):
         u_uuid = call.data.replace("show_key_", "")
-        db.cursor.execute("SELECT end_date FROM keys WHERE uuid=? AND user_id=?", (u_uuid, uid))
+    
+        # Получаем все данные ключа
+        db.cursor.execute("""
+            SELECT k.days, k.end_date, k.sub_id 
+            FROM keys k 
+            WHERE k.uuid=? AND k.user_id=?
+        """, (u_uuid, uid))
+    
         row = db.cursor.fetchone()
         if not row:
             bot.answer_callback_query(call.id, "Ключ не найден")
             return
 
-        end_date = datetime.datetime.fromisoformat(str(row[0]))
+        days, end_date, sub_id = row  # распаковываем данные
+    
+        # Преобразуем строку в datetime если нужно
+        if isinstance(end_date, str):
+            try:
+                end_date = datetime.datetime.fromisoformat(str(end_date))
+            except:
+                end_date = datetime.datetime.strptime(str(end_date), '%Y-%m-%d %H:%M:%S')
+    
         remaining = get_remaining_time_str(end_date)
         end_date_formatted = end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M') + ' МСК'
 
-        sub_id = db.get_key_subid(u_uuid)
-        if not sub_id:
-            bot.answer_callback_query(call.id, "Подписка не найдена")
-            return
-
-        sub_id = db.get_key_subid(u_uuid)
         if not sub_id:
             bot.answer_callback_query(call.id, "Подписка не найдена")
             return
@@ -551,7 +560,7 @@ def query_handler(call):
 
         kb = InlineKeyboardMarkup()
     
-    # Deeplink для Happ с вашим Render доменом
+        # Deeplink для Happ с вашим Render доменом
         deeplink = f"{RENDER_URL}/url/?url=happ://add/{RENDER_URL}/sub/{sub_id}"
     
         kb.add(InlineKeyboardButton(
