@@ -68,7 +68,7 @@ def add_user_to_xray(user_uuid, email, days):
     expiry_time = int((time.time() + (days * 86400)) * 1000)
     
     # Генерируем короткий subId как в панели (8–16 символов hex)
-    sub_id = secrets.token_hex(8) # пример: w794j35f1udoambp
+    sub_id = secrets.token_hex(32) # пример: w794j35f1udoambp
     payload = {
         "id": INBOUND_ID,
         "settings": json.dumps({
