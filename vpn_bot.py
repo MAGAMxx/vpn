@@ -296,10 +296,10 @@ def get_referral_menu(user_id):
         callback_data=f"copy_ref_{user_id}"
     ))
     
-    kb.add(InlineKeyboardButton(
-        f"{EMOJI['stats']} Моя статистика",
-        callback_data="ref_stats"
-    ))
+    #kb.add(InlineKeyboardButton(
+        #f"{EMOJI['stats']} Моя статистика",
+        #callback_data="ref_stats"
+    #))
     
     kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
     
@@ -336,10 +336,11 @@ def start_handler(message):
             db.add_key(user_id, u_uuid, SID, 3)
             db.update_key_subid(u_uuid, sub_id)
             text = (
-                f"{EMOJI['crown']} *Добро пожаловать!* {EMOJI['fire']}\n\n"
-                f"{EMOJI['star']} *Бонусные 3 дня выданы!*\n"
-                f"{EMOJI['key']} Подключиться можно в «Мои ключи»\n\n"
-                f"{EMOJI['gift']} Приглашай друзей — +{REFERRAL_REWARD_DAYS} дней!"
+                f"🎆*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
+                f"📱 Социальные сети и мессенджеры без блокировок\n"
+                f"🌍 Полная анонимность, высокая скорость и стабильное соединение\n"
+                f"🚀 Instagram, YouTube, WhatsApp — заходи где угодно!\n"
+                f"😍Вам доступен бонус - 3 дня. Перейдите в (Мой ключ)"
             )
         else:
             text = f"{EMOJI['cross']} *Ошибка триала*"
@@ -363,11 +364,16 @@ def query_handler(call):
         target = call.data.replace("back_", "")
         if target == "main":
             text = (
-                f"{EMOJI['crown']} *Главное меню MAGAMIX VPN* {EMOJI['fire']}\n\n"
-                f"{EMOJI['info']} *Выберите действие:*"
+                f"🎆*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
+                f"📱 Социальные сети и мессенджеры без блокировок\n"
+                f"🌍 Полная анонимность, высокая скорость и стабильное соединение\n"
+                f"🚀 Instagram, YouTube, WhatsApp — заходи где угодно!"
             )
-            bot.edit_message_text(text, uid, call.message.id,
-                                reply_markup=get_main_menu(), parse_mode="Markdown")
+            bot.edit_message_text(
+                text, uid, call.message.id,
+                reply_markup=get_main_menu(),
+                parse_mode="Markdown"
+            )
         return
     
     if call.data == "main":
