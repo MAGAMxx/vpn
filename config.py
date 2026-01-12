@@ -83,7 +83,7 @@ EMOJI = {
 }
 
 
-HAPP_NAME = "MAGAMIX VPN"  # Название, которое будет отображаться в Happ
+HAPP_NAME = "MAGAMIX VPN 🇳🇱"
 HAPP_LOGO = "https://cdn-icons-png.flaticon.com/512/3067/3067256.png"
-SERVER_LOCATION = "Нидерланды 🇳🇱"  
-RENDER_URL = "https://magamix.onrender.com" 
+SERVER_LOCATION = "Нидерланды 🇳🇱"
+RENDER_URL = "https://magamix.onrender.com"
