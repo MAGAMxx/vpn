@@ -393,11 +393,29 @@ def stats_command(message):
         bot.send_message(message.chat.id, "⛔ Команда доступна только администратору")
         return
     
-    # Получаем статистику из базы данных
+    
+    # Получаем статистику
     total_users = db.get_total_users_count()
     total_keys = db.get_total_keys_count()
     active_keys = db.get_active_keys_count()
-    total_payments = db.get_total_payments_sum()
+    
+    # Считаем сумму платежей
+    cursor.execute("""
+        SELECT plan_key, COUNT(*) as count 
+        FROM payments 
+        WHERE status = 'confirmed' 
+        GROUP BY plan_key
+    """)
+    
+    total_sum = 0
+    payments_rows = cursor.fetchall()
+    payments_info = []
+    
+    for plan_key, count in payments_rows:
+        if plan_key in PRICES:
+            plan_total = PRICES[plan_key]['price'] * count
+            total_sum += plan_total
+            payments_info.append(f"  • {PRICES[plan_key]['name']}: {count} × {PRICES[plan_key]['price']}₽ = {plan_total}₽")
     
     # Получаем количество новых пользователей за последние 24 часа
     cursor.execute("""
@@ -406,15 +424,24 @@ def stats_command(message):
     """)
     new_last_24h = cursor.fetchone()[0]
     
+    # Формируем текст
     stats_text = (
         f"📊 *СТАТИСТИКА БОТА*\n\n"
-        f"👥 *Всего пользователей:* {total_users}\n"
-        f"📈 *Новых за 24ч:* {new_last_24h}\n"
-        f"🔑 *Всего ключей:* {total_keys}\n"
-        f"✅ *Активных ключей:* {active_keys}\n"
-        f"💰 *Сумма оплат:* {total_payments}₽\n\n"
-        f"📅 *Дата:* {datetime.datetime.now(MOSCOW_TZ).strftime('%d.%m.%Y %H:%M')} МСК"
+        f"👥 *Пользователи:*\n"
+        f"  • Всего: {total_users}\n"
+        f"  • Новых за 24ч: {new_last_24h}\n\n"
+        f"🔑 *Ключи:*\n"
+        f"  • Всего создано: {total_keys}\n"
+        f"  • Активных сейчас: {active_keys}\n\n"
+        f"💰 *Платежи:*\n"
     )
+    
+    if payments_info:
+        stats_text += "\n".join(payments_info) + f"\n  • *Итого:* {total_sum}₽"
+    else:
+        stats_text += "  • Нет подтвержденных платежей"
+    
+    stats_text += f"\n\n📅 *Дата:* {datetime.datetime.now(MOSCOW_TZ).strftime('%d.%m.%Y %H:%M')} МСК"
     
     bot.send_message(message.chat.id, stats_text, parse_mode="Markdown")
 
