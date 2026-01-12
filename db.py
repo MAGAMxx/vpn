@@ -1,6 +1,6 @@
 # db.py
 import sqlite3
-import datetime
+from datetime import datetime, timedelta
 
 # Подключаемся к базе (check_same_thread=False для работы в многопоточной среде)
 conn = sqlite3.connect('vpn_bot.db', check_same_thread=False)
@@ -86,8 +86,6 @@ def add_user(uid, username, referrer_id=None):
 
 def add_key(user_id, u_uuid, sid, days):
     """Создает новый ключ"""
-    from datetime import datetime, timedelta
-    
     print(f"DEBUG add_key: user_id={user_id}, uuid={u_uuid[:8]}, days={days}")
     
     start_date = datetime.now().isoformat()
@@ -140,7 +138,6 @@ def get_active_key(user_id):
     row_list = list(row)
     try:
         # Пропускаем конвертацию, если дата уже в правильном формате
-        # или если это число дней
         if row_list[6] and isinstance(row_list[6], str):
             if '-' in row_list[6] and ':' in row_list[6]:  # Проверяем, это дата ISO?
                 row_list[6] = datetime.fromisoformat(row_list[6])
@@ -153,7 +150,7 @@ def get_active_key(user_id):
         return None
     
     return tuple(row_list)
-
+    
 def get_keys(user_id):
     cursor.execute("""
         SELECT * FROM keys
