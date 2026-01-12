@@ -51,11 +51,11 @@ def add_user_to_xray(user_uuid, email, days):
     if not xui_login():
         print("[ADD CLIENT] Не удалось авторизоваться")
         return None
-
+        
     expiry_time = int((time.time() + (days * 86400)) * 1000)
     
     # Генерируем короткий subId
-    sub_id = secrets.token_hex(8)
+    sub_id = secrets.token_hex(8)  # 16 символов hex
 
     payload = {
         "id": INBOUND_ID,
@@ -70,7 +70,7 @@ def add_user_to_xray(user_uuid, email, days):
                 "enable": True,
                 "tgId": "",
                 "subId": sub_id,
-                "remark": f"{HAPP_NAME} | {SERVER_LOCATION}"  # ← Измените здесь
+                "remark": f"{HAPP_NAME} | {SERVER_LOCATION}"  # ← Важно!
             }]
         })
     }
@@ -83,7 +83,6 @@ def add_user_to_xray(user_uuid, email, days):
         if response_data.get("success"):
             print(f"[SUCCESS] Ключ создан с subId: {sub_id}")
             return sub_id
-        
         else:
             msg = response_data.get("msg", "")
             print(f"[ADD CLIENT] Ошибка панели: {msg}")
@@ -92,7 +91,7 @@ def add_user_to_xray(user_uuid, email, days):
     except Exception as e:
         print(f"[ADD CLIENT ERROR] {e}")
         return None
-
+        
 def generate_subscription_config(sub_id):
     """
     Генерирует полную конфигурацию подписки для Happ
@@ -207,7 +206,7 @@ def delete_user_from_xray(email):
 def generate_vless_link(u_uuid):
     return (f"vless://{u_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality"
             f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#{HAPP_NAME} | {SERVER_LOCATION}")
-
+    
 def generate_happ_deeplink(sub_id):
     if not sub_id:
         return None
@@ -520,11 +519,11 @@ def query_handler(call):
     elif call.data.startswith("show_key_"):
         u_uuid = call.data.replace("show_key_", "")
     
-        # Получаем все данные ключа
+        # Получаем данные ключа - используем правильные имена колонок
         db.cursor.execute("""
-            SELECT k.days, k.end_date, k.sub_id 
-            FROM keys k 
-            WHERE k.uuid=? AND k.user_id=?
+            SELECT days, end_date, sub_id 
+            FROM keys 
+            WHERE uuid=? AND user_id=?
         """, (u_uuid, uid))
     
         row = db.cursor.fetchone()
@@ -532,9 +531,16 @@ def query_handler(call):
             bot.answer_callback_query(call.id, "Ключ не найден")
             return
 
-        days, end_date, sub_id = row  # распаковываем данные
+        # Проверяем структуру row
+        if len(row) >= 3:
+            days, end_date, sub_id = row
+        else:
+        # Если структура другая, используем значения по умолчанию
+            days = 3
+            end_date = db.cursor.execute("SELECT end_date FROM keys WHERE uuid=?", (u_uuid,)).fetchone()[0]
+            sub_id = db.cursor.execute("SELECT sub_id FROM keys WHERE uuid=?", (u_uuid,)).fetchone()[0]
     
-        # Преобразуем строку в datetime если нужно
+        # Преобразуем строку в datetime
         if isinstance(end_date, str):
             try:
                 end_date = datetime.datetime.fromisoformat(str(end_date))
@@ -560,7 +566,7 @@ def query_handler(call):
 
         kb = InlineKeyboardMarkup()
     
-        # Deeplink для Happ с вашим Render доменом
+    # Deeplink для Happ
         deeplink = f"{RENDER_URL}/url/?url=happ://add/{RENDER_URL}/sub/{sub_id}"
     
         kb.add(InlineKeyboardButton(
@@ -568,7 +574,7 @@ def query_handler(call):
             url=deeplink
         ))
     
-        kb.add(InlineKeyboardButton(
+       kb.add(InlineKeyboardButton(
             f"{EMOJI['copy']} Ссылка-подписка", 
             callback_data=f"copy_{u_uuid}"
         ))
