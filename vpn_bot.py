@@ -387,6 +387,37 @@ def start_handler(message):
     
     bot.send_message(user_id, text, reply_markup=get_main_menu(), parse_mode="Markdown")
 
+@bot.message_handler(commands=['stats'])
+def stats_command(message):
+    if message.from_user.id != ADMIN_ID:
+        bot.send_message(message.chat.id, "⛔ Команда доступна только администратору")
+        return
+    
+    # Получаем статистику из базы данных
+    total_users = db.get_total_users_count()
+    total_keys = db.get_total_keys_count()
+    active_keys = db.get_active_keys_count()
+    total_payments = db.get_total_payments_sum()
+    
+    # Получаем количество новых пользователей за последние 24 часа
+    cursor.execute("""
+        SELECT COUNT(*) FROM users 
+        WHERE created_at >= DATETIME('now', '-1 day')
+    """)
+    new_last_24h = cursor.fetchone()[0]
+    
+    stats_text = (
+        f"📊 *СТАТИСТИКА БОТА*\n\n"
+        f"👥 *Всего пользователей:* {total_users}\n"
+        f"📈 *Новых за 24ч:* {new_last_24h}\n"
+        f"🔑 *Всего ключей:* {total_keys}\n"
+        f"✅ *Активных ключей:* {active_keys}\n"
+        f"💰 *Сумма оплат:* {total_payments}₽\n\n"
+        f"📅 *Дата:* {datetime.datetime.now(MOSCOW_TZ).strftime('%d.%m.%Y %H:%M')} МСК"
+    )
+    
+    bot.send_message(message.chat.id, stats_text, parse_mode="Markdown")
+
 @bot.callback_query_handler(func=lambda call: True)
 def query_handler(call):
     uid = call.from_user.id
