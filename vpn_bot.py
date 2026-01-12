@@ -8,7 +8,6 @@ import time
 import threading
 import pytz
 import db
-import secrets
 from config import *
 
 requests.packages.urllib3.disable_warnings()
@@ -52,11 +51,11 @@ def add_user_to_xray(user_uuid, email, days):
     if not xui_login():
         print("[ADD CLIENT] Не удалось авторизоваться")
         return None
-        
+
     expiry_time = int((time.time() + (days * 86400)) * 1000)
     
-    # Генерируем короткий subId
-    sub_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
+    # Генерируем короткий subId (как в панели: w794j35f1udoambp)
+    sub_id = secrets.token_hex(8)  # 16 символов hex — идеально подходит
 
     payload = {
         "id": INBOUND_ID,
@@ -70,8 +69,8 @@ def add_user_to_xray(user_uuid, email, days):
                 "expiryTime": expiry_time,
                 "enable": True,
                 "tgId": "",
-                "subId": sub_id,
-                "remark": f"{HAPP_NAME} | {SERVER_LOCATION}"  # ← Важно!
+                "subId": sub_id  
+                "remark": "MAGAMIX |Нидерланды"
             }]
         })
     }
@@ -83,7 +82,8 @@ def add_user_to_xray(user_uuid, email, days):
 
         if response_data.get("success"):
             print(f"[SUCCESS] Ключ создан с subId: {sub_id}")
-            return sub_id
+            return sub_id  # возвращаем sub_id (короткий токен)
+        
         else:
             msg = response_data.get("msg", "")
             print(f"[ADD CLIENT] Ошибка панели: {msg}")
@@ -92,64 +92,8 @@ def add_user_to_xray(user_uuid, email, days):
     except Exception as e:
         print(f"[ADD CLIENT ERROR] {e}")
         return None
-        
-def generate_subscription_config(sub_id):
-    """
-    Генерирует полную конфигурацию подписки для Happ
-    с названием, логотипом и метаданными
-    """
-    # Получаем данные ключа из базы
-    db.cursor.execute("SELECT k.uuid, k.end_date, k.days, k.user_id FROM keys k WHERE k.sub_id = ?", (sub_id,))
-    row = db.cursor.fetchone()
-    
-    if not row:
-        return None
-    
-    u_uuid, end_date_str, days, user_id = row
-    
-    # Преобразуем строку в datetime
-    try:
-        if isinstance(end_date_str, str):
-            end_date = datetime.datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
-        else:
-            end_date = end_date_str
-        expiry_timestamp = int(end_date.timestamp())
-    except:
-        # Если не удалось преобразовать, используем время + дни
-        expiry_timestamp = int((time.time() + (days * 86400)) * 1000)
-    
-    # Генерируем VLESS ссылку
-    vless_link = f"vless://{u_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#{HAPP_NAME} | {SERVER_LOCATION}"
-    
-    # Создаем конфигурацию в формате, который понимает Happ
-    subscription_config = {
-        "version": 2,
-        "name": HAPP_NAME,
-        "logo": HAPP_LOGO,
-        "subscription": {
-            "id": sub_id,
-            "name": HAPP_NAME,
-            "expire": expiry_timestamp * 1000,  # в миллисекундах
-            "time_left": max((expiry_timestamp - int(time.time())) * 1000, 0),
-            "created": int(time.time() * 1000),
-            "updated": int(time.time() * 1000),
-            "info": f"{SERVER_LOCATION} | {days} дней"
-        },
-        "metadata": {
-            "provider": HAPP_NAME,
-            "support": "https://t.me/nejnayatp3",
-            "website": "https://t.me/your_bot_username",
-            "version": "1.0"
-        }
-    }
-    
-    return subscription_config
 
 def generate_subscription_link(sub_id):
-    """
-    Генерирует ссылку на подписку.
-    Теперь это будет JSON-конфигурация, а не простая ссылка.
-    """
     return f"{SUB_BASE_URL}{SUB_PATH}{sub_id}"
 
 
@@ -201,8 +145,8 @@ def delete_user_from_xray(email):
 # --- Вспомогательные функции ---
 def generate_vless_link(u_uuid):
     return (f"vless://{u_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality"
-            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#{HAPP_NAME} | {SERVER_LOCATION}")
-    
+            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#⚡MAGAMIX_VPN | НИДЕРЛАНДЫ ")
+
 def generate_happ_deeplink(sub_id):
     if not sub_id:
         return None
@@ -514,68 +458,36 @@ def query_handler(call):
     
     elif call.data.startswith("show_key_"):
         u_uuid = call.data.replace("show_key_", "")
-    
-        # Получаем данные ключа - используем правильные имена колонок
-        db.cursor.execute("""
-            SELECT days, end_date, sub_id 
-            FROM keys 
-            WHERE uuid=? AND user_id=?
-        """, (u_uuid, uid))
-    
+        db.cursor.execute("SELECT end_date FROM keys WHERE uuid=? AND user_id=?", (u_uuid, uid))
         row = db.cursor.fetchone()
         if not row:
             bot.answer_callback_query(call.id, "Ключ не найден")
             return
 
-        # Проверяем структуру row
-        if len(row) >= 3:
-            days, end_date, sub_id = row
-        else:
-        # Если структура другая, используем значения по умолчанию
-            days = 3
-            end_date = db.cursor.execute("SELECT end_date FROM keys WHERE uuid=?", (u_uuid,)).fetchone()[0]
-            sub_id = db.cursor.execute("SELECT sub_id FROM keys WHERE uuid=?", (u_uuid,)).fetchone()[0]
-    
-        # Преобразуем строку в datetime
-        if isinstance(end_date, str):
-            try:
-                end_date = datetime.datetime.fromisoformat(str(end_date))
-            except:
-                end_date = datetime.datetime.strptime(str(end_date), '%Y-%m-%d %H:%M:%S')
-    
+        end_date = datetime.datetime.fromisoformat(str(row[0]))
         remaining = get_remaining_time_str(end_date)
         end_date_formatted = end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M') + ' МСК'
 
+        sub_id = db.get_key_subid(u_uuid)
         if not sub_id:
             bot.answer_callback_query(call.id, "Подписка не найдена")
             return
 
+        sub_link = generate_subscription_link(sub_id)  # ← ссылка-подписка
+
         text = (
             f"{EMOJI['key']} *Детали ключа*\n\n"
-            f"📱 *Приложение:* {HAPP_NAME}\n"
-            f"📍 *Сервер:* {SERVER_LOCATION}\n"
-            f"⏰ *Срок:* {days} дней\n"
-            f"🕒 *Осталось:* **{remaining}**\n"
-            f"📅 *До:* {end_date_formatted}\n\n"
-            f"Нажмите кнопку ниже — откроется Happ с вашей подпиской!"
+            f"{EMOJI['time']} *Осталось:* **{remaining}**\n"
+            f"*До:* {end_date_formatted}\n\n"
+            f"Нажмите кнопку ниже — Happ откроется автоматически и добавит подписку с трафиком и сроком!"
         )
 
         kb = InlineKeyboardMarkup()
-    
-    # Deeplink для Happ
-        deeplink = f"{RENDER_URL}/url/?url=happ://add/{RENDER_URL}/sub/{sub_id}"
-    
-        kb.add(InlineKeyboardButton(
-            f"{EMOJI['rocket']} Открыть в Happ", 
-            url=deeplink
-        ))
-     
-        kb.add(InlineKeyboardButton(
-            f"{EMOJI['copy']} Ссылка-подписка", 
-            callback_data=f"copy_{u_uuid}"
-        ))
-    
+        deeplink = f"https://magamix.onrender.com/url/?url=happ://add/https://magamix.onrender.com/connect/{sub_id}"
+        kb.add(InlineKeyboardButton("Подключиться", url=deeplink))
+        #kb.add(InlineKeyboardButton(f"{EMOJI['copy']} Скопировать ссылку-подписку", callback_data=f"copy_{u_uuid}"))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
+        #kb.add(InlineKeyboardButton(f"{EMOJI['home']} Главное", callback_data="main"))
 
         bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
     
