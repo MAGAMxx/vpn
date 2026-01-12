@@ -7,7 +7,7 @@ SERVER_IP = "31.130.131.214"
 SERVER_PORT = 2053
 PBK = "P2Q_Uq49DV8iEiwiRxNe0UYKCXL--sp-nU0pihntn30"
 FP = "chrome"
-SNI = "www.microsoft.com"
+SNI = "www.bing.com,bing.com"
 SID = "9864"  # Если в панели настроен другой ShortID, замените
 # Настройки доступа к 3X-UI
 PANEL_URL = "https://31.130.131.214:55694"
