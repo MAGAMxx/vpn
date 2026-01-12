@@ -65,7 +65,7 @@ def add_user_to_xray(user_uuid, email, days):
             "clients": [{
                 "id": user_uuid,
                 "alterId": 0,
-                "email": f"MAGAMIX VPN {email}",
+                "email": f"🇳🇱 ⚡MAGAMIX VPN {email}",
                 "limitIp": 2,
                 "totalGB": 0,
                 "expiryTime": expiry_time,
