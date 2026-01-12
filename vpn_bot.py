@@ -54,8 +54,8 @@ def add_user_to_xray(user_uuid, email, days):
 
     expiry_time = int((time.time() + (days * 86400)) * 1000)
     
-    # Генерируем короткий subId (как в панели: w794j35f1udoambp)
-    sub_id = secrets.token_hex(8)  # 16 символов hex — идеально подходит
+    # Генерируем короткий subId
+    sub_id = secrets.token_hex(8)
 
     payload = {
         "id": INBOUND_ID,
@@ -69,8 +69,8 @@ def add_user_to_xray(user_uuid, email, days):
                 "expiryTime": expiry_time,
                 "enable": True,
                 "tgId": "",
-                "subId": sub_id  
-                "remark": "MAGAMIX |Нидерланды"
+                "subId": sub_id,
+                "remark": f"{HAPP_NAME} | {SERVER_LOCATION}"  # ← Измените здесь
             }]
         })
     }
@@ -82,7 +82,7 @@ def add_user_to_xray(user_uuid, email, days):
 
         if response_data.get("success"):
             print(f"[SUCCESS] Ключ создан с subId: {sub_id}")
-            return sub_id  # возвращаем sub_id (короткий токен)
+            return sub_id
         
         else:
             msg = response_data.get("msg", "")
@@ -93,7 +93,68 @@ def add_user_to_xray(user_uuid, email, days):
         print(f"[ADD CLIENT ERROR] {e}")
         return None
 
+def generate_subscription_config(sub_id):
+    """
+    Генерирует полную конфигурацию подписки для Happ
+    с названием, логотипом и метаданными
+    """
+    # Получаем данные ключа из базы
+    db.cursor.execute("SELECT k.uuid, k.end_date, k.days, k.user_id FROM keys k WHERE k.sub_id = ?", (sub_id,))
+    row = db.cursor.fetchone()
+    
+    if not row:
+        return None
+    
+    u_uuid, end_date, days, user_id = row
+    expiry_timestamp = int(end_date.timestamp())
+    
+    # Генерируем VLESS ссылку
+    vless_link = f"vless://{u_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#{HAPP_NAME} | {SERVER_LOCATION}"
+    
+    # Создаем конфигурацию в формате, который понимает Happ
+    subscription_config = {
+        "version": 2,
+        "name": HAPP_NAME,
+        "logo": HAPP_LOGO,
+        "subscription": {
+            "id": sub_id,
+            "name": HAPP_NAME,
+            "expire": expiry_timestamp * 1000,  # в миллисекундах
+            "time_left": max((expiry_timestamp - int(time.time())) * 1000, 0),
+            "created": int(time.time() * 1000),
+            "updated": int(time.time() * 1000),
+            "info": f"{SERVER_LOCATION} | {days} дней"
+        },
+        "servers": [{
+            "id": 1,
+            "name": SERVER_LOCATION,
+            "type": "vless",
+            "address": SERVER_IP,
+            "port": int(SERVER_PORT),
+            "uuid": u_uuid,
+            "sni": SNI,
+            "fp": FP,
+            "pbk": PBK,
+            "sid": SID,
+            "security": "reality",
+            "remark": f"{HAPP_NAME} | {SERVER_LOCATION}",
+            "config": vless_link
+        }],
+        "metadata": {
+            "provider": HAPP_NAME,
+            "support": "https://t.me/nejnayatp3",
+            "website": "https://t.me/your_bot_username",
+            "version": "1.0"
+        }
+    }
+    
+    return subscription_config
+
 def generate_subscription_link(sub_id):
+    """
+    Генерирует ссылку на подписку.
+    Теперь это будет JSON-конфигурация, а не простая ссылка.
+    """
     return f"{SUB_BASE_URL}{SUB_PATH}{sub_id}"
 
 
@@ -145,7 +206,7 @@ def delete_user_from_xray(email):
 # --- Вспомогательные функции ---
 def generate_vless_link(u_uuid):
     return (f"vless://{u_uuid}@{SERVER_IP}:{SERVER_PORT}?type=tcp&encryption=none&security=reality"
-            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#⚡MAGAMIX_VPN | НИДЕРЛАНДЫ ")
+            f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F#{HAPP_NAME} | {SERVER_LOCATION}")
 
 def generate_happ_deeplink(sub_id):
     if not sub_id:
