@@ -26,8 +26,7 @@ CREATE TABLE IF NOT EXISTS keys (
     days INTEGER,       
     end_date DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    sub_id TEXT,
-    is_active INTEGER DEFAULT 1,
+    sub_id TEXT,          
     FOREIGN KEY (user_id) REFERENCES users(id)
 )
 ''')
@@ -84,19 +83,19 @@ def add_user(uid, username, referrer_id=None):
     
 
 def add_key(user_id, u_uuid, sid, days):
-    created_at = datetime.datetime.now().isoformat()  # ← используем created_at
+    start_date = datetime.datetime.now().isoformat()
     end_date = (datetime.datetime.now() + datetime.timedelta(days=days)).isoformat()
-    
+   
     cursor.execute("""
         UPDATE keys SET is_active = 0
         WHERE user_id = ? AND is_active = 1
     """, (user_id,))
-    
+   
     cursor.execute("""
-        INSERT INTO keys (user_id, uuid, sid, days, end_date, created_at, is_active)
-        VALUES (?, ?, ?, ?, ?, ?, 1)
-    """, (user_id, u_uuid, sid, days, end_date, created_at))
-    
+        INSERT INTO keys (user_id, uuid, sid, start_date, end_date, is_active)
+        VALUES (?, ?, ?, ?, ?, 1)
+    """, (user_id, u_uuid, sid, start_date, end_date))
+   
     conn.commit()
     return cursor.lastrowid
 
@@ -104,15 +103,15 @@ def get_active_key(user_id):
     cursor.execute("""
         SELECT * FROM keys
         WHERE user_id = ?
+        AND is_active = 1
         AND end_date > DATETIME('now')
-        ORDER BY end_date DESC
         LIMIT 1
     """, (user_id,))
-    
+   
     row = cursor.fetchone()
     if not row:
         return None
-    
+   
     row_list = list(row)
     try:
         row_list[3] = datetime.datetime.fromisoformat(row_list[3])
@@ -120,29 +119,30 @@ def get_active_key(user_id):
     except (ValueError, TypeError) as e:
         print(f"Ошибка преобразования дат: {e}")
         return None
-    
+   
     return tuple(row_list)
 
 def get_keys(user_id):
     cursor.execute("""
         SELECT * FROM keys
         WHERE user_id = ?
-        ORDER BY created_at DESC  # ← используем created_at вместо start_date
+        ORDER BY start_date DESC
     """, (user_id,))
-    
+   
     rows = cursor.fetchall()
     converted = []
-    
+   
     for row in rows:
         row_list = list(row)
         try:
-            row_list[5] = datetime.datetime.fromisoformat(row_list[5])  # end_date
-        except (ValueError, TypeError, IndexError) as e:
+            row_list[3] = datetime.datetime.fromisoformat(row_list[3])
+            row_list[4] = datetime.datetime.fromisoformat(row_list[4])
+        except (ValueError, TypeError) as e:
             print(f"Ошибка преобразования дат: {e}")
             continue
-        
+       
         converted.append(tuple(row_list))
-    
+   
     return converted
 
 def extend_key_days(user_id, days_to_add):
