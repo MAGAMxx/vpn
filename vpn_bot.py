@@ -153,17 +153,22 @@ def generate_vless_link(u_uuid):
             f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F# НИДЕРЛАНДЫ 🇳🇱 MAGAMIX")
 
 def generate_happ_deeplink(sub_id):
+    """Генерирует правильный deeplink для автоматического открытия в HAPP"""
     if not sub_id:
         return None
     
-    # 1. Ссылка на вашу подписку через Render
+    # 1. Ссылка на подписку, которую будет читать HAPP (через ваш Render)
+    # Обязательно https:// в начале
     sub_url = f"magamix.onrender.com{sub_id}"
     
-    # 2. Формируем команду для приложения HAPP
+    # 2. Команда для приложения HAPP
     happ_link = f"happ://add/{sub_url}"
     
-    # 3. Возвращаем полную ссылку для редиректа (КАВЫЧКА В КОНЦЕ ОБЯЗАТЕЛЬНА)
-    return f"magamix.onrender.com{happ_link}"
+    # 3. Финальная ссылка для редиректа в 1 клик
+    # Кнопка в Телеграм ДОЛЖНА начинаться с https://
+    final_url = f"magamix.onrender.com{happ_link}"
+    
+    return final_url
 
 def get_remaining_time_str(end_date):
     end_date_aware = MOSCOW_TZ.localize(end_date)
