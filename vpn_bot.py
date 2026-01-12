@@ -153,19 +153,17 @@ def generate_vless_link(u_uuid):
             f"&sni={SNI}&fp={FP}&pbk={PBK}&sid={SID}&spx=%2F# НИДЕРЛАНДЫ 🇳🇱 MAGAMIX")
 
 def generate_happ_deeplink(sub_id):
-    """Генерирует идеальную ссылку для 1 клика и отображения имени"""
     if not sub_id:
         return None
     
-    # Ссылка, которую будет опрашивать приложение HAPP
-    # Добавляем ?name для дополнительной гарантии имени
-    sub_url = f"magamix.onrender.com{sub_id}?name=MAGAMIX%20VPN%20🇳🇱"
+    # 1. Ссылка на вашу подписку через Render
+    sub_url = f"magamix.onrender.com{sub_id}"
     
-    # Ссылка для открытия приложения
+    # 2. Формируем команду для приложения HAPP
     happ_link = f"happ://add/{sub_url}"
     
-    # Финальная обертка для автоматического срабатывания в браузере
-    return f"magamix.onrender.com{happ_link}
+    # 3. Возвращаем полную ссылку для редиректа (КАВЫЧКА В КОНЦЕ ОБЯЗАТЕЛЬНА)
+    return f"magamix.onrender.com{happ_link}"
 
 def get_remaining_time_str(end_date):
     end_date_aware = MOSCOW_TZ.localize(end_date)
