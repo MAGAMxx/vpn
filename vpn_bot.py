@@ -347,9 +347,12 @@ def start_handler(message):
             text = f"{EMOJI['cross']} *Ошибка триала*"
     else:
         text = (
-            f"{EMOJI['crown']} *С возвращением!* {EMOJI['fire']}\n\n"
-            f"{EMOJI['rocket']} VPN готов к работе!"
+            f"🎆*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
+            f"📱 Социальные сети и мессенджеры без блокировок\n"
+            f"🌍 Полная анонимность, высокая скорость и стабильное соединение\n"
+            f"🚀 Instagram, YouTube, WhatsApp — заходи где угодно!"
         )
+
     
     bot.send_message(user_id, text, reply_markup=get_main_menu(), parse_mode="Markdown")
 
