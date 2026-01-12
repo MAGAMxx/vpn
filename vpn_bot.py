@@ -76,7 +76,15 @@ def add_user_to_xray(user_uuid, email, days):
         response_data = r.json()
 
         if response_data.get("success"):
-            # Получаем subId после добавления
+            # Принудительно запрашиваем подписку, чтобы 3X-UI сгенерировал subId
+            sub_url = f"{PANEL_URL}:{SUB_PORT}{SUB_PATH}{user_uuid}"  # используем uuid как subId
+            try:
+                session.get(sub_url, verify=False, timeout=5)
+                print(f"[INFO] Запросил подписку для генерации subId: {sub_url}")
+            except Exception as e:
+                print(f"[WARNING] Не удалось запросить подписку: {e}")
+
+            # Теперь получаем свежие настройки inbound
             get_url = f"{PANEL_URL}/{PANEL_PATH}/panel/api/inbounds/get/{INBOUND_ID}"
             r_get = session.get(get_url, verify=False, timeout=10)
             data = r_get.json()
@@ -87,18 +95,20 @@ def add_user_to_xray(user_uuid, email, days):
                     if cl["id"] == user_uuid:
                         sub_id = cl.get("subId")
                         if sub_id:
-                            print(f"[SUCCESS] subId получен: {sub_id}")
+                            print(f"[SUCCESS] subId получен после запроса: {sub_id}")
                             return sub_id
                         else:
-                            print("[WARNING] subId не найден в ответе!")
+                            print("[WARNING] subId всё ещё не найден после запроса!")
                             return None
             else:
                 print("[ERROR] Не удалось получить inbound после добавления")
                 return None
+
         else:
             msg = response_data.get("msg", "")
             print(f"[ADD CLIENT] Ошибка панели: {msg}")
             return None
+
     except Exception as e:
         print(f"[ADD CLIENT ERROR] {e}")
         return None
