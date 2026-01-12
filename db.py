@@ -24,7 +24,9 @@ CREATE TABLE IF NOT EXISTS keys (
     uuid TEXT UNIQUE,
     sid TEXT,
     days INTEGER,       
+    start_date DATETIME,
     end_date DATETIME,
+    is_active INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     sub_id TEXT,          
     FOREIGN KEY (user_id) REFERENCES users(id)
