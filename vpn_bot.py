@@ -77,7 +77,7 @@ def add_user_to_xray(user_uuid, email, days):
 
         if response_data.get("success"):
             # Принудительно запрашиваем подписку, чтобы 3X-UI сгенерировал subId
-            sub_url = f"{PANEL_URL}:{SUB_PORT}{SUB_PATH}{user_uuid}"  # используем uuid как subId
+            sub_url = f"https://31.130.131.214:{SUB_PORT}{SUB_PATH}{user_uuid}"  # используем uuid как subId
             try:
                 session.get(sub_url, verify=False, timeout=5)
                 print(f"[INFO] Запросил подписку для генерации subId: {sub_url}")
