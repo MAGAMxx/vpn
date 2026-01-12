@@ -719,6 +719,49 @@ def auto_delete_loop():
             print(f"[CLEANUP ERROR] {e}")
         time.sleep(1800)
 
+
+def notify_expiry_warning():
+    while True:
+        try:
+            # Получаем все активные ключи, где осталось 1–2 дня
+            cursor.execute("""
+                SELECT user_id, uuid, end_date 
+                FROM keys 
+                WHERE is_active = 1 
+                AND end_date > DATETIME('now') 
+                AND end_date <= DATETIME('now', '+2 days')
+                AND end_date > DATETIME('now', '+1 day')  -- только 1–2 дня осталось
+            """)
+            
+            rows = cursor.fetchall()
+            
+            for row in rows:
+                user_id, u_uuid, end_date_str = row
+                end_date = datetime.datetime.fromisoformat(end_date_str)
+                remaining_days = (end_date - datetime.datetime.now()).days
+                
+                # Проверяем, не отправляли ли уже уведомление (можно добавить флаг в БД позже)
+                # Пока просто отправляем раз в день
+                
+                text = (
+                    f"{EMOJI['warning']} *Ваш ключ скоро истечёт!*\n\n"
+                    f"Осталось **{remaining_days} дней** до {end_date.strftime('%d.%m.%Y %H:%M')} МСК\n\n"
+                    f"🔑 Не забудьте продлить подписку в разделе «Купить VPN»!\n"
+                    f"Приглашай друзей — +{REFERRAL_REWARD_DAYS} дней бесплатно! 👥"
+                )
+                
+                try:
+                    bot.send_message(user_id, text, parse_mode="Markdown")
+                    print(f"[NOTIFY] Отправлено предупреждение пользователю {user_id} (ключ {u_uuid})")
+                except Exception as e:
+                    print(f"[NOTIFY ERROR] Пользователь {user_id}: {e}")
+        
+        except Exception as e:
+            print(f"[NOTIFY LOOP ERROR] {e}")
+        
+        time.sleep(86400)  # Проверять раз в сутки (24 часа)
+
+threading.Thread(target=notify_expiry_warning, daemon=True).start()
 threading.Thread(target=auto_delete_loop, daemon=True).start()
 
 if __name__ == "__main__":
