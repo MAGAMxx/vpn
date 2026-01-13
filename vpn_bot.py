@@ -256,16 +256,11 @@ def give_referral_reward(referrer_id, referred_id):
         return False
 
 def get_main_menu():
-    """Главное меню"""
-    kb = InlineKeyboardMarkup(row_width=2)
-    kb.add(
-        InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"),
-        InlineKeyboardButton(f"{EMOJI['key']} Мой ключ", callback_data="my_key")
-    )
-    kb.add(
-        InlineKeyboardButton(f"{EMOJI['friends']} Пригласить друга", callback_data="referral"),
-        InlineKeyboardButton(f"{EMOJI['support']} Поддержка", url="https://t.me/MAGAMIX_support")
-    )
+    kb = InlineKeyboardMarkup(row_width=1)  # ← 1 кнопка в ряд!
+    kb.add(InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"))
+    kb.add(InlineKeyboardButton(f"{EMOJI['key']} Подключиться", callback_data="my_key"))
+    kb.add(InlineKeyboardButton(f"{EMOJI['friends']} Пригласить друга", callback_data="referral"))
+    kb.add(InlineKeyboardButton(f"{EMOJI['support']} Поддержка", url="https://t.me/MAGAMIX_support"))
     kb.add(InlineKeyboardButton(f"{EMOJI['info']} Информация", callback_data="info"))
     return kb
 
@@ -528,9 +523,7 @@ def query_handler(call):
                             reply_markup=kb, parse_mode="Markdown")
 
     elif call.data == "my_key":
-        keys = db.get_keys(uid)
         active_key = db.get_active_key(uid)
-
         if not active_key:
             text = f"{EMOJI['key']} *У вас нет активного ключа* {EMOJI['cross']}"
             kb = InlineKeyboardMarkup()
@@ -540,33 +533,24 @@ def query_handler(call):
             return
 
         u_uuid = active_key[1]
-        end_date = active_key[4]
-        end_date_aware = MOSCOW_TZ.localize(end_date)
-        now_aware = datetime.datetime.now(MOSCOW_TZ)
-        delta = end_date_aware - now_aware
-
-        if delta.total_seconds() <= 0:
-            text = f"{EMOJI['key']} *Ключ истёк* {EMOJI['cross']}"
-            kb = InlineKeyboardMarkup()
-            kb.add(InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"))
-            kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
-            bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
-            return
-
-        remaining = f"{delta.days} дн." if delta.days >= 1 else f"{int(delta.total_seconds() // 3600)} ч."
+        end_date = active_key[4]  # это datetime объект
+        remaining = get_remaining_time_str(end_date)
         end_date_formatted = end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M') + ' МСК'
 
         text = (
-            f"🔑 *Детали ключа*\n\n"
-            f"⏰ *Осталось:* **{remaining}**\n"
+            f"🔑 *Ваш ключ*\n\n"
+            f"⏳ *Осталось:* **{remaining}**\n"
             f"До: {end_date_formatted}\n\n"
-            f"Нажмите «Подключиться» и следуйте инструкциям ↓"
+            f"Выберите устройство для подключения ↓"
         )
 
-        kb = InlineKeyboardMarkup()
-        kb.add(InlineKeyboardButton("Подключиться ⚡", callback_data=f"connect_{u_uuid}"))
+        kb = InlineKeyboardMarkup(row_width=1)  # ← 1 кнопка в ряд (5 строк вниз)
+        kb.add(InlineKeyboardButton("📱 Android", callback_data=f"device_android_{u_uuid}"))
+        kb.add(InlineKeyboardButton("🍏 iOS", callback_data=f"device_ios_{u_uuid}"))
+        kb.add(InlineKeyboardButton("💻 Windows", callback_data=f"device_windows_{u_uuid}"))
+        kb.add(InlineKeyboardButton("🖥 macOS", callback_data=f"device_macos_{u_uuid}"))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
-
+        
         bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
 
     elif call.data.startswith("connect_"):
@@ -645,6 +629,54 @@ def query_handler(call):
 
         bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
 
+    elif call.data.startswith("device_windows_"):
+        u_uuid = call.data.replace("device_windows_", "")
+        sub_id = db.get_key_subid(u_uuid)
+        if not sub_id:
+            bot.answer_callback_query(call.id, "Подписка не найдена")
+            return
+
+        deeplink = generate_happ_deeplink(sub_id)
+
+        text = (
+            f"💻 **Для Windows**\n\n"
+            f"1. Нажмите кнопку «Установить» и скачайте приложение Happ\n"
+            f"2. После установки нажмите «Подключиться» — Happ откроется автоматически\n\n"
+            f"Установка: https://github.com/Happ-proxy/happ-desktop/releases/latest/download/setup-Happ.x64.exe\n\n"
+            f"Подключение:"
+        )
+
+        kb = InlineKeyboardMarkup()
+        kb.add(InlineKeyboardButton("Установить", url="https://github.com/Happ-proxy/happ-desktop/releases/latest/download/setup-Happ.x64.exe"))
+        kb.add(InlineKeyboardButton("Подключиться ⚡", url=deeplink))
+        kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="my_key"))
+
+        bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
+
+    elif call.data.startswith("device_macos_"):
+        u_uuid = call.data.replace("device_macos_", "")
+        sub_id = db.get_key_subid(u_uuid)
+        if not sub_id:
+            bot.answer_callback_query(call.id, "Подписка не найдена")
+            return
+
+        deeplink = generate_happ_deeplink(sub_id)
+
+        text = (
+            f"🖥 **Для macOS**\n\n"
+            f"1. Нажмите кнопку «Установить» и скачайте приложение Happ\n"
+            f"2. После установки нажмите «Подключиться» — Happ откроется автоматически\n\n"
+            f"Установка: https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973\n\n"
+            f"Подключение:"
+        )
+
+        kb = InlineKeyboardMarkup()
+        kb.add(InlineKeyboardButton("Установить", url="https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973"))
+        kb.add(InlineKeyboardButton("Подключиться ⚡", url=deeplink))
+        kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="my_key"))
+
+        bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
+    
     elif call.data.startswith("show_key_"):
         u_uuid = call.data.replace("show_key_", "")
         db_cursor = db.conn.cursor()
