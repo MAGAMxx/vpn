@@ -987,24 +987,9 @@ def get_uuid():
     if not sub_id:
         return jsonify({"error": "sub_id required"}), 400
 
-    db_cursor = db.conn.cursor()
-    db_cursor.execute("SELECT uuid, end_date FROM keys WHERE sub_id = ?", (sub_id,))
-    row = db_cursor.fetchone()
-
-    if row:
-        real_uuid, end_date_str = row
-        # end_date_str — это datetime-строка, переводим в Unix timestamp (ms)
-        if end_date_str:
-            from datetime import datetime
-            end_date = datetime.fromisoformat(end_date_str)
-            expiry_ms = int(end_date.timestamp() * 1000)  # миллисекунды
-        else:
-            expiry_ms = 0  # если end_date None — неопределённо
-
-        return jsonify({
-            "uuid": real_uuid,
-            "expiryTime": expiry_ms
-        })
+    data = get_key_data_by_subid(sub_id)
+    if data:
+        return jsonify(data)
     else:
         return jsonify({"error": "sub_id not found"}), 404
 
