@@ -4,11 +4,9 @@ import datetime
 
 # Подключаемся к базе (check_same_thread=False для работы в многопоточной среде)
 conn = sqlite3.connect('vpn_bot.db', check_same_thread=False)
-#cursor = conn.cursor()
-
 cursor = conn.cursor()
 
-# Создаём таблицы, если их нет (все в одном блоке)
+# Создаём таблицы, если их нет
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
@@ -27,7 +25,7 @@ CREATE TABLE IF NOT EXISTS keys (
     start_date TEXT,
     end_date TEXT,
     is_active INTEGER DEFAULT 1,
-    sub_id TEXT,
+    sub_id TEXT, 
     FOREIGN KEY (user_id) REFERENCES users(id)
 )
 ''')
@@ -36,7 +34,7 @@ cursor.execute('''
 CREATE TABLE IF NOT EXISTS payments (
     user_id INTEGER,
     plan_key TEXT,
-    amount REAL,
+    amount REAL, 
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     status TEXT DEFAULT 'pending',
     FOREIGN KEY (user_id) REFERENCES users(id)
@@ -68,11 +66,7 @@ CREATE TABLE IF NOT EXISTS referral_rewards (
 
 conn.commit()
 
-# Закрываем курсор (хорошая практика, но не обязательно здесь)
-cursor.close()
-
 def add_user(uid, username, referrer_id=None):
-    cursor = conn.cursor()
     cursor.execute("""
         INSERT OR IGNORE INTO users (id, username, referrer_id)
         VALUES (?, ?, ?)
@@ -90,8 +84,7 @@ def add_user(uid, username, referrer_id=None):
 def add_key(user_id, u_uuid, sid, days):
     start_date = datetime.datetime.now().isoformat()
     end_date = (datetime.datetime.now() + datetime.timedelta(days=days)).isoformat()
-
-    cursor = conn.cursor()
+    
     cursor.execute("""
         UPDATE keys SET is_active = 0
         WHERE user_id = ? AND is_active = 1
@@ -102,13 +95,10 @@ def add_key(user_id, u_uuid, sid, days):
         VALUES (?, ?, ?, ?, ?, 1)
     """, (user_id, u_uuid, sid, start_date, end_date))
     
-    rows_affected = cursor.rowcount
     conn.commit()
-    print(f"[DEBUG DB] add_key вставил {rows_affected} строк для uuid {u_uuid}")
     return cursor.lastrowid
 
 def get_active_key(user_id):
-    cursor = conn.cursor()
     cursor.execute("""
         SELECT * FROM keys
         WHERE user_id = ?
@@ -132,7 +122,6 @@ def get_active_key(user_id):
     return tuple(row_list)
 
 def add_payment(user_id, plan_key, amount):
-    cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO payments (user_id, plan_key, amount, status) 
         VALUES (?, ?, ?, 'pending')
@@ -140,7 +129,6 @@ def add_payment(user_id, plan_key, amount):
     conn.commit()
 
 def get_keys(user_id):
-    cursor = conn.cursor()
     cursor.execute("""
         SELECT * FROM keys
         WHERE user_id = ?
@@ -164,7 +152,6 @@ def get_keys(user_id):
     return converted
 
 def extend_key_days(user_id, days_to_add):
-    cursor = conn.cursor()
     cursor.execute("""
         SELECT uuid, end_date FROM keys
         WHERE user_id = ?
@@ -203,7 +190,6 @@ def create_key_if_none(user_id, u_uuid, sid, days):
     return False # Ключ уже есть
 
 def add_referral_reward(referrer_id, referred_id, days_added):
-    cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO referral_rewards (user_id, referral_id, days_added, reward_date)
         VALUES (?, ?, ?, ?)
@@ -219,7 +205,6 @@ def add_referral_reward(referrer_id, referred_id, days_added):
 
 def get_referrals_count(user_id):
     """Получает количество рефералов пользователя"""
-    cursor = conn.cursor()
     cursor.execute("""
         SELECT COUNT(*) FROM referrals
         WHERE referrer_id = ? AND reward_given = 1
@@ -227,7 +212,6 @@ def get_referrals_count(user_id):
     return cursor.fetchone()[0]
 
 def get_referrals_stats(user_id):
-    cursor = conn.cursor()
     cursor.execute("""
         SELECT
             COUNT(*) as total,
@@ -244,7 +228,6 @@ def get_referrals_stats(user_id):
 
 def get_user_info(user_id):
     """Получает информацию о пользователе"""
-    cursor = conn.cursor()
     cursor.execute("""
         SELECT id, username, referrer_id, registration_date
         FROM users WHERE id = ?
@@ -273,7 +256,6 @@ def get_user_info(user_id):
 def get_total_users_count():
     """Возвращает общее количество пользователей"""
     try:
-        cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM users")
         return cursor.fetchone()[0]
     except Exception as e:
@@ -283,7 +265,6 @@ def get_total_users_count():
 def get_total_keys_count():
     """Возвращает общее количество ключей"""
     try:
-        cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM keys")
         return cursor.fetchone()[0]
     except Exception as e:
@@ -293,7 +274,6 @@ def get_total_keys_count():
 def get_active_keys_count():
     """Возвращает количество активных ключей"""
     try:
-        cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM keys WHERE is_active = 1 AND end_date > DATETIME('now')")
         return cursor.fetchone()[0]
     except Exception as e:
@@ -303,7 +283,6 @@ def get_active_keys_count():
 # Остальные функции остаются без изменений...
 def get_keys_with_expiry(user_id):
     """Для старого метода — uuid + end_date как datetime"""
-    cursor = conn.cursor()
     cursor.execute("""
         SELECT uuid, end_date FROM keys
         WHERE user_id = ?
@@ -321,18 +300,15 @@ def get_keys_with_expiry(user_id):
     return result
 
 def get_all_expired_keys():
-    cursor = conn.cursor()
     cursor.execute("SELECT user_id, uuid FROM keys WHERE end_date < DATETIME('now')")
     return cursor.fetchall()
 
 def delete_key_by_uuid(u_uuid):
-    cursor = conn.cursor()
     cursor.execute("DELETE FROM keys WHERE uuid = ?", (u_uuid,))
     conn.commit()
 
 
 def get_last_pending_plan(user_id):
-    cursor = conn.cursor()
     cursor.execute("""
         SELECT plan_key FROM payments
         WHERE user_id = ?
@@ -357,7 +333,6 @@ def get_last_pending_plan(user_id):
 def get_user_payments_count(user_id):
     """Возвращает количество покупок пользователя"""
     try:
-        cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM payments WHERE user_id = ? AND status = 'confirmed'", (user_id,))
         return cursor.fetchone()[0]
     except Exception as e:
@@ -367,7 +342,6 @@ def get_user_payments_count(user_id):
 def get_user_payments_sum(user_id):
     """Возвращает сумму покупок пользователя"""
     try:
-        cursor = conn.cursor()
         cursor.execute("""
             SELECT SUM(p.amount) 
             FROM payments p
@@ -383,7 +357,6 @@ def get_user_payments_sum(user_id):
 def get_new_users_last_24h():
     """Возвращает количество новых пользователей за последние 24 часа"""
     try:
-        cursor = conn.cursor()
         cursor.execute("""
             SELECT COUNT(*) FROM users 
             WHERE registration_date >= DATETIME('now', '-1 day')
@@ -396,7 +369,6 @@ def get_new_users_last_24h():
 def get_payments_stats():
     """Возвращает статистику по платежам"""
     try:
-        cursor = conn.cursor()
         cursor.execute("""
             SELECT plan_key, COUNT(*) as count 
             FROM payments 
@@ -410,70 +382,14 @@ def get_payments_stats():
 
 # НОВЫЕ ФУНКЦИИ ДЛЯ sub_id
 def update_key_subid(u_uuid, sub_id):
-    print(f"[DEBUG DB] UPDATE: sub_id = '{sub_id}' (тип: {type(sub_id)}), uuid = '{u_uuid}' (тип: {type(u_uuid)})")
-    cursor = conn.cursor()
-    cursor.execute("SELECT uuid FROM keys WHERE uuid = ?", (u_uuid,))
-    existing = cursor.fetchone()
-    print(f"[DEBUG DB] UUID существует перед обновлением: {existing}")
+    """Сохраняет sub_id для ключа"""
     cursor.execute("""
         UPDATE keys SET sub_id = ? WHERE uuid = ?
     """, (sub_id, u_uuid))
-   
-    rows_affected = cursor.rowcount
     conn.commit()
-   
-    print(f"[DEBUG DB] UPDATE затронул строк: {rows_affected}")
-    cursor.close()
-    return rows_affected > 0
 
 def get_key_subid(u_uuid):
     """Возвращает sub_id по uuid ключа"""
-    cursor = conn.cursor()
-    print(f"[DEBUG] Ищу sub_id по uuid: {u_uuid}")
     cursor.execute("SELECT sub_id FROM keys WHERE uuid = ?", (u_uuid,))
     row = cursor.fetchone()
-    sub_id = row[0] if row else None
-    print(f"[DEBUG] Найден sub_id: {sub_id}")
-    cursor.close()
-    return sub_id
-
-
-def get_key_expiry_ms(u_uuid):
-    """Возвращает end_date ключа в миллисекундах (для Happ)"""
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT end_date FROM keys
-        WHERE uuid = ? AND is_active = 1
-    """, (u_uuid,))
-    row = cursor.fetchone()
-    if row and row[0]:
-        try:
-            end_date = datetime.datetime.fromisoformat(row[0].split('.')[0])  # убираем микросекунды
-            return int(end_date.timestamp() * 1000)
-        except ValueError as e:
-            print(f"[DB ERROR] Некорректная дата для uuid {u_uuid}: {row[0]} ({e})")
-            return 0
-    cursor.close()
-    return 0
-
-def get_key_data_by_subid(sub_id):
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT uuid, end_date FROM keys
-        WHERE sub_id = ? AND is_active = 1
-    """, (sub_id,))
-    row = cursor.fetchone()
-    if row and row[0]:
-        uuid_val, end_date_str = row
-        expiry_ms = 0
-        if end_date_str:
-            try:
-                end_date = datetime.datetime.fromisoformat(end_date_str.split('.')[0])
-                expiry_ms = int(end_date.timestamp() * 1000)
-            except Exception as e:
-                print(f"[DB ERROR] Не удалось распарсить end_date '{end_date_str}' для sub_id {sub_id}: {e}")
-                expiry_ms = 0
-        cursor.close()
-        return {"uuid": uuid_val, "expiryTime": expiry_ms}
-    cursor.close()
-    return None
+    return row[0] if row else None
