@@ -988,13 +988,19 @@ def get_uuid():
         return jsonify({"error": "sub_id required"}), 400
 
     db_cursor = db.conn.cursor()
-    db_cursor.execute("SELECT uuid, expiry_time FROM keys WHERE sub_id = ?", (sub_id,))
+    db_cursor.execute("SELECT uuid, end_date FROM keys WHERE sub_id = ?", (sub_id,))
     row = db_cursor.fetchone()
 
     if row:
-        real_uuid, expiry_time = row
-        # expiry_time — это timestamp в секундах, переводим в ms
-        expiry_ms = int(expiry_time * 1000) if expiry_time else 0
+        real_uuid, end_date_str = row
+        # end_date_str — это datetime-строка, переводим в Unix timestamp (ms)
+        if end_date_str:
+            from datetime import datetime
+            end_date = datetime.fromisoformat(end_date_str)
+            expiry_ms = int(end_date.timestamp() * 1000)  # миллисекунды
+        else:
+            expiry_ms = 0  # если end_date None — неопределённо
+
         return jsonify({
             "uuid": real_uuid,
             "expiryTime": expiry_ms
