@@ -384,11 +384,21 @@ def get_payments_stats():
 
 # НОВЫЕ ФУНКЦИИ ДЛЯ sub_id
 def update_key_subid(u_uuid, sub_id):
-    """Сохраняет sub_id для ключа"""
+    print(f"[DEBUG DB] UPDATE: sub_id = '{sub_id}' (тип: {type(sub_id)}), uuid = '{u_uuid}' (тип: {type(u_uuid)})")
+    
+    cursor.execute("SELECT uuid FROM keys WHERE uuid = ?", (u_uuid,))
+    existing = cursor.fetchone()
+    print(f"[DEBUG DB] Существует ли uuid в базе перед обновлением: {existing}")
+    
     cursor.execute("""
         UPDATE keys SET sub_id = ? WHERE uuid = ?
     """, (sub_id, u_uuid))
+    
+    rows_affected = cursor.rowcount
     conn.commit()
+    
+    print(f"[DEBUG DB] UPDATE затронул строк: {rows_affected}")
+    return rows_affected > 0
 
 def get_key_subid(u_uuid):
     """Возвращает sub_id по uuid ключа"""
