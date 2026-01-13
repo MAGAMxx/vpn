@@ -979,21 +979,28 @@ def notify_expiry_warning():
         time.sleep(86400)  # Проверять раз в сутки (24 часа)
 
 def get_key_data_by_subid(sub_id):
-    cursor.execute("""
+    # Создаём локальный курсор, чтобы не зависеть от глобального
+    db_cursor = db.conn.cursor()
+    
+    db_cursor.execute("""
         SELECT uuid, end_date FROM keys 
         WHERE sub_id = ? AND is_active = 1
     """, (sub_id,))
-    row = cursor.fetchone()
+    
+    row = db_cursor.fetchone()
+    
     if row and row[0]:
         uuid_val, end_date_str = row
         expiry_ms = 0
         if end_date_str:
             try:
-                end_date = datetime.datetime.fromisoformat(end_date_str)
-                expiry_ms = int(end_date.timestamp() * 1000)
+                # Убираем микросекунды (если они есть)
+                end_date_str_clean = end_date_str.split('.')[0]
+                end_date = datetime.datetime.fromisoformat(end_date_str_clean)
+                expiry_ms = int(end_date.timestamp() * 1000)  # миллисекунды для Happ
             except Exception as e:
                 print(f"[DB ERROR] Не удалось распарсить end_date '{end_date_str}' для sub_id {sub_id}: {e}")
-                expiry_ms = 0  # fallback — Happ поймёт как "неопределённо"
+                expiry_ms = 0  # fallback
         return {"uuid": uuid_val, "expiryTime": expiry_ms}
     return None
 
