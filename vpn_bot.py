@@ -260,7 +260,7 @@ def get_main_menu():
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
         InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"),
-        InlineKeyboardButton(f"{EMOJI['key']} Подключиться", callback_data="my_key"
+        InlineKeyboardButton(f"{EMOJI['key']} Подключиться", callback_data="my_key")
     )
     kb.add(
         InlineKeyboardButton(f"{EMOJI['friends']} Пригласить друга", callback_data="referral"),
