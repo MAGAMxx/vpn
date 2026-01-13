@@ -256,16 +256,11 @@ def give_referral_reward(referrer_id, referred_id):
         return False
 
 def get_main_menu():
-    """Главное меню"""
-    kb = InlineKeyboardMarkup(row_width=2)
-    kb.add(
-        InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"),
-        InlineKeyboardButton(f"{EMOJI['key']} Подключиться", callback_data="my_key")
-    )
-    kb.add(
-        InlineKeyboardButton(f"{EMOJI['friends']} Пригласить друга", callback_data="referral"),
-        InlineKeyboardButton(f"{EMOJI['support']} Поддержка", url="https://t.me/MAGAMIX_support")
-    )
+    kb = InlineKeyboardMarkup(row_width=1)  # ← 1 кнопка в ряд!
+    kb.add(InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"))
+    kb.add(InlineKeyboardButton(f"{EMOJI['key']} Подключиться", callback_data="my_key"))
+    kb.add(InlineKeyboardButton(f"{EMOJI['friends']} Пригласить друга", callback_data="referral"))
+    kb.add(InlineKeyboardButton(f"{EMOJI['support']} Поддержка", url="https://t.me/MAGAMIX_support"))
     kb.add(InlineKeyboardButton(f"{EMOJI['info']} Информация", callback_data="info"))
     return kb
 
@@ -806,9 +801,6 @@ def query_handler(call):
         )
 
         kb = InlineKeyboardMarkup()
-        kb.add(InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"))
-        kb.add(InlineKeyboardButton(f"{EMOJI['friends']} Пригласить друга", callback_data="referral"))
-        kb.add(InlineKeyboardButton(f"{EMOJI['support']} Поддержка", url="https://t.me/MAGAMIX_support"))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
 
         bot.edit_message_text(text, uid, call.message.id,
