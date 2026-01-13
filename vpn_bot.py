@@ -375,15 +375,18 @@ def start_handler(message):
         email = f"trial_{user_id}*{int(time.time())}"
         sub_id = add_user_to_xray(u_uuid, email, 3)
         if sub_id:
-            # Сначала добавляем ключ в базу (чтобы запись существовала)
             db.add_key(user_id, u_uuid, SID, 3)
             print(f"[DEBUG] Ключ добавлен в базу. u_uuid = {u_uuid}")
 
-            # Теперь обновляем sub_id
+        # Проверяем, что uuid реально в базе
+            cursor = db.conn.cursor()
+            cursor.execute("SELECT uuid FROM keys WHERE uuid = ?", (u_uuid,))
+            check_uuid = cursor.fetchone()
+            print(f"[DEBUG] Проверка uuid в базе сразу после add_key: {check_uuid}")
+
             success = db.update_key_subid(u_uuid, sub_id)
             print(f"[DEBUG] update_key_subid вернул: {success} для sub_id {sub_id}")
-
-            # Проверяем, что sub_id реально сохранился
+    
             saved_sub_id = db.get_key_subid(u_uuid)
             print(f"[DEBUG] Проверяем sub_id из базы по uuid: {saved_sub_id}")
 
