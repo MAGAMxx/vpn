@@ -556,13 +556,11 @@ def query_handler(call):
             f"Выберите устройство для подключения ↓"
         )
 
-        kb = InlineKeyboardMarkup(row_width=4)
-        kb.add(
-            InlineKeyboardButton("📱 Android", callback_data=f"device_android_{u_uuid}"),
-            InlineKeyboardButton("🍏 iOS", callback_data=f"device_ios_{u_uuid}"),
-            InlineKeyboardButton("💻 Windows", callback_data=f"device_windows_{u_uuid}"),
-            InlineKeyboardButton("🖥 macOS", callback_data=f"device_macos_{u_uuid}")
-        )
+        kb = InlineKeyboardMarkup(row_width=1)  # ← 1 кнопка в ряд (5 строк вниз)
+        kb.add(InlineKeyboardButton("📱 Android", callback_data=f"device_android_{u_uuid}"))
+        kb.add(InlineKeyboardButton("🍏 iOS", callback_data=f"device_ios_{u_uuid}"))
+        kb.add(InlineKeyboardButton("💻 Windows", callback_data=f"device_windows_{u_uuid}"))
+        kb.add(InlineKeyboardButton("🖥 macOS", callback_data=f"device_macos_{u_uuid}"))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
 
         bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
