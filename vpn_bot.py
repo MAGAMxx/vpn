@@ -256,11 +256,16 @@ def give_referral_reward(referrer_id, referred_id):
         return False
 
 def get_main_menu():
-    kb = InlineKeyboardMarkup(row_width=1)  # ← 1 кнопка в ряд!
-    kb.add(InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"))
-    kb.add(InlineKeyboardButton(f"{EMOJI['key']} Подключиться", callback_data="my_key"))
-    kb.add(InlineKeyboardButton(f"{EMOJI['friends']} Пригласить друга", callback_data="referral"))
-    kb.add(InlineKeyboardButton(f"{EMOJI['support']} Поддержка", url="https://t.me/MAGAMIX_support"))
+    """Главное меню"""
+    kb = InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"),
+        InlineKeyboardButton(f"{EMOJI['key']} Мой ключ", callback_data="my_key")
+    )
+    kb.add(
+        InlineKeyboardButton(f"{EMOJI['friends']} Пригласить друга", callback_data="referral"),
+        InlineKeyboardButton(f"{EMOJI['support']} Поддержка", url="https://t.me/MAGAMIX_support")
+    )
     kb.add(InlineKeyboardButton(f"{EMOJI['info']} Информация", callback_data="info"))
     return kb
 
@@ -338,7 +343,10 @@ def start_handler(message):
 
     # Уведомление админу о новом пользователе
     if is_new_user:
+        # Форматируем имя пользователя
         full_name = f"{first_name} {last_name}".strip() if first_name or last_name else "Не указано"
+
+        # Формируем информацию о реферере
         ref_info = ""
         if referrer_id:
             try:
@@ -347,6 +355,8 @@ def start_handler(message):
                 ref_info = f"\n👥 *Пригласил:* {referrer_username}"
             except:
                 ref_info = f"\n👥 *Пригласил:* ID: {referrer_id}"
+
+        # Отправляем уведомление админу
         admin_notification = (
             f"🎉 *НОВЫЙ ПОЛЬЗОВАТЕЛЬ!*\n\n"
             f"🆔 *ID:* `{user_id}`\n"
@@ -356,6 +366,7 @@ def start_handler(message):
             f"{ref_info}\n\n"
             f"📊 *Общее число пользователей:* {db.get_total_users_count()}"
         )
+
         try:
             bot.send_message(ADMIN_ID, admin_notification, parse_mode="Markdown")
         except Exception as e:
@@ -371,32 +382,19 @@ def start_handler(message):
         sub_id = add_user_to_xray(u_uuid, email, 3)
         if sub_id:
             db.add_key(user_id, u_uuid, SID, 3)
-            print(f"[DEBUG] Ключ добавлен в базу. u_uuid = {u_uuid}")
-
-        # Проверяем, что uuid реально в базе
-            cursor = db.conn.cursor()
-            cursor.execute("SELECT uuid FROM keys WHERE uuid = ?", (u_uuid,))
-            check_uuid = cursor.fetchone()
-            print(f"[DEBUG] Проверка uuid в базе сразу после add_key: {check_uuid}")
-
-            success = db.update_key_subid(u_uuid, sub_id)
-            print(f"[DEBUG] update_key_subid вернул: {success} для sub_id {sub_id}")
-    
-            saved_sub_id = db.get_key_subid(u_uuid)
-            print(f"[DEBUG] Проверяем sub_id из базы по uuid: {saved_sub_id}")
-
+            db.update_key_subid(u_uuid, sub_id)
             text = (
-                f"⚡*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
+                f"🎆*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
                 f"📱 Социальные сети и мессенджеры без блокировок\n"
                 f"🌍 Полная анонимность, высокая скорость и стабильное соединение\n"
-                f"🚀 Instagram, YouTube, WhatsApp — заходи где угодно!\n\n\n"
-                f"😍Выдали вам 3 дня бесплатного VPN"
+                f"🚀 Instagram, YouTube, WhatsApp — заходи где угодно!\n"
+                f"😍Вам доступен бонус - 3 дня. Перейдите в (Мой ключ)"
             )
         else:
             text = f"{EMOJI['cross']} *Ошибка триала*"
     else:
         text = (
-            f"⚡*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
+            f"🎆*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
             f"📱 Социальные сети и мессенджеры без блокировок\n"
             f"🌍 Полная анонимность, высокая скорость и стабильное соединение\n"
             f"🚀 Instagram, YouTube, WhatsApp — заходи где угодно!"
@@ -473,7 +471,7 @@ def query_handler(call):
         target = call.data.replace("back_", "")
         if target == "main":
             text = (
-                f"⚡*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
+                f"🎆*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
                 f"📱 Социальные сети и мессенджеры без блокировок\n"
                 f"🌍 Полная анонимность, высокая скорость и стабильное соединение\n"
                 f"🚀 Instagram, YouTube, WhatsApp — заходи где угодно!"
@@ -530,7 +528,9 @@ def query_handler(call):
                             reply_markup=kb, parse_mode="Markdown")
 
     elif call.data == "my_key":
+        keys = db.get_keys(uid)
         active_key = db.get_active_key(uid)
+
         if not active_key:
             text = f"{EMOJI['key']} *У вас нет активного ключа* {EMOJI['cross']}"
             kb = InlineKeyboardMarkup()
@@ -540,22 +540,31 @@ def query_handler(call):
             return
 
         u_uuid = active_key[1]
-        end_date = active_key[4]  # это datetime объект
-        remaining = get_remaining_time_str(end_date)
+        end_date = active_key[4]
+        end_date_aware = MOSCOW_TZ.localize(end_date)
+        now_aware = datetime.datetime.now(MOSCOW_TZ)
+        delta = end_date_aware - now_aware
+
+        if delta.total_seconds() <= 0:
+            text = f"{EMOJI['key']} *Ключ истёк* {EMOJI['cross']}"
+            kb = InlineKeyboardMarkup()
+            kb.add(InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"))
+            kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
+            bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
+            return
+
+        remaining = f"{delta.days} дн." if delta.days >= 1 else f"{int(delta.total_seconds() // 3600)} ч."
         end_date_formatted = end_date.replace(tzinfo=MOSCOW_TZ).strftime('%d.%m.%Y в %H:%M') + ' МСК'
 
         text = (
-            f"🔑 *Ваш ключ*\n\n"
-            f"⏳ *Осталось:* **{remaining}**\n"
+            f"🔑 *Детали ключа*\n\n"
+            f"⏰ *Осталось:* **{remaining}**\n"
             f"До: {end_date_formatted}\n\n"
-            f"Выберите устройство для подключения ↓"
+            f"Нажмите «Подключиться» и следуйте инструкциям ↓"
         )
 
-        kb = InlineKeyboardMarkup(row_width=1)  # ← 1 кнопка в ряд (5 строк вниз)
-        kb.add(InlineKeyboardButton("📱 Android", callback_data=f"device_android_{u_uuid}"))
-        kb.add(InlineKeyboardButton("🍏 iOS", callback_data=f"device_ios_{u_uuid}"))
-        kb.add(InlineKeyboardButton("💻 Windows", callback_data=f"device_windows_{u_uuid}"))
-        kb.add(InlineKeyboardButton("🖥 macOS", callback_data=f"device_macos_{u_uuid}"))
+        kb = InlineKeyboardMarkup()
+        kb.add(InlineKeyboardButton("Подключиться ⚡", callback_data=f"connect_{u_uuid}"))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
 
         bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
@@ -631,54 +640,6 @@ def query_handler(call):
 
         kb = InlineKeyboardMarkup()
         kb.add(InlineKeyboardButton("Установить", url="https://play.google.com/store/apps/details?id=com.happproxy&hl=ru"))
-        kb.add(InlineKeyboardButton("Подключиться ⚡", url=deeplink))
-        kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="my_key"))
-
-        bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
-
-    elif call.data.startswith("device_windows_"):
-        u_uuid = call.data.replace("device_windows_", "")
-        sub_id = db.get_key_subid(u_uuid)
-        if not sub_id:
-            bot.answer_callback_query(call.id, "Подписка не найдена")
-            return
-
-        deeplink = generate_happ_deeplink(sub_id)
-
-        text = (
-            f"💻 **Для Windows**\n\n"
-            f"1. Нажмите кнопку «Установить» и скачайте приложение Happ\n"
-            f"2. После установки нажмите «Подключиться» — Happ откроется автоматически\n\n"
-            f"Установка: https://github.com/Happ-proxy/happ-desktop/releases/latest/download/setup-Happ.x64.exe\n\n"
-            f"Подключение:"
-        )
-
-        kb = InlineKeyboardMarkup()
-        kb.add(InlineKeyboardButton("Установить", url="https://github.com/Happ-proxy/happ-desktop/releases/latest/download/setup-Happ.x64.exe"))
-        kb.add(InlineKeyboardButton("Подключиться ⚡", url=deeplink))
-        kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="my_key"))
-
-        bot.edit_message_text(text, uid, call.message.id, reply_markup=kb, parse_mode="Markdown")
-
-    elif call.data.startswith("device_macos_"):
-        u_uuid = call.data.replace("device_macos_", "")
-        sub_id = db.get_key_subid(u_uuid)
-        if not sub_id:
-            bot.answer_callback_query(call.id, "Подписка не найдена")
-            return
-
-        deeplink = generate_happ_deeplink(sub_id)
-
-        text = (
-            f"🖥 **Для macOS**\n\n"
-            f"1. Нажмите кнопку «Установить» и скачайте приложение Happ\n"
-            f"2. После установки нажмите «Подключиться» — Happ откроется автоматически\n\n"
-            f"Установка: https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973\n\n"
-            f"Подключение:"
-        )
-
-        kb = InlineKeyboardMarkup()
-        kb.add(InlineKeyboardButton("Установить", url="https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973"))
         kb.add(InlineKeyboardButton("Подключиться ⚡", url=deeplink))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="my_key"))
 
@@ -801,6 +762,9 @@ def query_handler(call):
         )
 
         kb = InlineKeyboardMarkup()
+        kb.add(InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"))
+        kb.add(InlineKeyboardButton(f"{EMOJI['friends']} Пригласить друга", callback_data="referral"))
+        kb.add(InlineKeyboardButton(f"{EMOJI['support']} Поддержка", url="https://t.me/MAGAMIX_support"))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
 
         bot.edit_message_text(text, uid, call.message.id,
@@ -1014,32 +978,6 @@ def notify_expiry_warning():
 
         time.sleep(86400)  # Проверять раз в сутки (24 часа)
 
-def get_key_data_by_subid(sub_id):
-    # Создаём локальный курсор, чтобы не зависеть от глобального
-    db_cursor = db.conn.cursor()
-    
-    db_cursor.execute("""
-        SELECT uuid, end_date FROM keys 
-        WHERE sub_id = ? AND is_active = 1
-    """, (sub_id,))
-    
-    row = db_cursor.fetchone()
-    
-    if row and row[0]:
-        uuid_val, end_date_str = row
-        expiry_ms = 0
-        if end_date_str:
-            try:
-                # Убираем микросекунды (если они есть)
-                end_date_str_clean = end_date_str.split('.')[0]
-                end_date = datetime.datetime.fromisoformat(end_date_str_clean)
-                expiry_ms = int(end_date.timestamp() * 1000)  # миллисекунды для Happ
-            except Exception as e:
-                print(f"[DB ERROR] Не удалось распарсить end_date '{end_date_str}' для sub_id {sub_id}: {e}")
-                expiry_ms = 0  # fallback
-        return {"uuid": uuid_val, "expiryTime": expiry_ms}
-    return None
-
 
 flask_app = Flask(__name__)
 
@@ -1049,9 +987,13 @@ def get_uuid():
     if not sub_id:
         return jsonify({"error": "sub_id required"}), 400
 
-    data = get_key_data_by_subid(sub_id)
-    if data:
-        return jsonify(data)
+    db_cursor = db.conn.cursor()
+    db_cursor.execute("SELECT uuid FROM keys WHERE sub_id = ?", (sub_id,))
+    row = db_cursor.fetchone()
+
+    if row:
+        real_uuid = row[0]
+        return jsonify({"uuid": real_uuid})
     else:
         return jsonify({"error": "sub_id not found"}), 404
 
