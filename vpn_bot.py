@@ -379,7 +379,7 @@ def start_handler(message):
             db.add_key(user_id, u_uuid, SID, 3)
             db.update_key_subid(u_uuid, sub_id)
             text = (
-                f"🎆*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
+                f"⚡*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
                 f"📱 Социальные сети и мессенджеры без блокировок\n"
                 f"🌍 Полная анонимность, высокая скорость и стабильное соединение\n"
                 f"🚀 Instagram, YouTube, WhatsApp — заходи где угодно!\n"
@@ -389,7 +389,7 @@ def start_handler(message):
             text = f"{EMOJI['cross']} *Ошибка триала*"
     else:
         text = (
-            f"🎆*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
+            f"⚡*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
             f"📱 Социальные сети и мессенджеры без блокировок\n"
             f"🌍 Полная анонимность, высокая скорость и стабильное соединение\n"
             f"🚀 Instagram, YouTube, WhatsApp — заходи где угодно!"
@@ -466,7 +466,7 @@ def query_handler(call):
         target = call.data.replace("back_", "")
         if target == "main":
             text = (
-                f"🎆*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
+                f"⚡*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
                 f"📱 Социальные сети и мессенджеры без блокировок\n"
                 f"🌍 Полная анонимность, высокая скорость и стабильное соединение\n"
                 f"🚀 Instagram, YouTube, WhatsApp — заходи где угодно!"
@@ -794,9 +794,6 @@ def query_handler(call):
         )
 
         kb = InlineKeyboardMarkup()
-        kb.add(InlineKeyboardButton(f"{EMOJI['buy']} Купить VPN", callback_data="buy"))
-        kb.add(InlineKeyboardButton(f"{EMOJI['friends']} Пригласить друга", callback_data="referral"))
-        kb.add(InlineKeyboardButton(f"{EMOJI['support']} Поддержка", url="https://t.me/MAGAMIX_support"))
         kb.add(InlineKeyboardButton(f"{EMOJI['back']} Назад", callback_data="back_main"))
 
         bot.edit_message_text(text, uid, call.message.id,
