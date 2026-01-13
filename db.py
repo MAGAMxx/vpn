@@ -391,5 +391,41 @@ def update_key_subid(u_uuid, sub_id):
 def get_key_subid(u_uuid):
     """Возвращает sub_id по uuid ключа"""
     cursor.execute("SELECT sub_id FROM keys WHERE uuid = ?", (u_uuid,))
+
+
+def get_key_expiry_ms(u_uuid):
+    """Возвращает end_date ключа в миллисекундах (для Happ)"""
+    cursor.execute("""
+        SELECT end_date FROM keys 
+        WHERE uuid = ? AND is_active = 1
+    """, (u_uuid,))
+    row = cursor.fetchone()
+    if row and row[0]:
+        try:
+            end_date = datetime.datetime.fromisoformat(row[0])
+            return int(end_date.timestamp() * 1000)  # миллисекунды
+        except ValueError:
+            print(f"[DB ERROR] Некорректная дата для uuid {u_uuid}: {row[0]}")
+            return 0
+    return 0  # если нет даты — 0 (Happ поймёт как неопределённо)
+
+def get_key_data_by_subid(sub_id):
+    """Возвращает uuid и expiry_ms по sub_id"""
+    cursor.execute("""
+        SELECT uuid, end_date FROM keys 
+        WHERE sub_id = ? AND is_active = 1
+    """, (sub_id,))
+    row = cursor.fetchone()
+    if row and row[0]:
+        uuid_val, end_date_str = row
+        expiry_ms = 0
+        if end_date_str:
+            try:
+                end_date = datetime.datetime.fromisoformat(end_date_str)
+                expiry_ms = int(end_date.timestamp() * 1000)
+            except ValueError:
+                print(f"[DB ERROR] Некорректная дата: {end_date_str}")
+        return {"uuid": uuid_val, "expiryTime": expiry_ms}
+    return None
     row = cursor.fetchone()
     return row[0] if row else None
