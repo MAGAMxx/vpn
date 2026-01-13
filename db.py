@@ -410,7 +410,6 @@ def get_key_expiry_ms(u_uuid):
     return 0  # если нет даты — 0 (Happ поймёт как неопределённо)
 
 def get_key_data_by_subid(sub_id):
-    """Возвращает uuid и expiry_ms по sub_id"""
     cursor.execute("""
         SELECT uuid, end_date FROM keys 
         WHERE sub_id = ? AND is_active = 1
@@ -421,11 +420,12 @@ def get_key_data_by_subid(sub_id):
         expiry_ms = 0
         if end_date_str:
             try:
-                end_date = datetime.datetime.fromisoformat(end_date_str)
+                # Убираем микросекунды (берём только до секунды)
+                end_date_str_clean = end_date_str.split('.')[0]
+                end_date = datetime.datetime.fromisoformat(end_date_str_clean)
                 expiry_ms = int(end_date.timestamp() * 1000)
-            except ValueError:
-                print(f"[DB ERROR] Некорректная дата: {end_date_str}")
+            except Exception as e:
+                print(f"[DB ERROR] Не удалось распарсить end_date '{end_date_str}' для sub_id {sub_id}: {e}")
+                expiry_ms = 0  # fallback
         return {"uuid": uuid_val, "expiryTime": expiry_ms}
     return None
-    row = cursor.fetchone()
-    return row[0] if row else None
