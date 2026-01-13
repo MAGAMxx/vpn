@@ -990,9 +990,10 @@ def get_key_data_by_subid(sub_id):
         if end_date_str:
             try:
                 end_date = datetime.datetime.fromisoformat(end_date_str)
-                expiry_ms = int(end_date.timestamp() * 1000)  # миллисекунды для Happ
-            except ValueError:
-                print(f"[DB ERROR] Некорректная дата для sub_id {sub_id}: {end_date_str}")
+                expiry_ms = int(end_date.timestamp() * 1000)
+            except Exception as e:
+                print(f"[DB ERROR] Не удалось распарсить end_date '{end_date_str}' для sub_id {sub_id}: {e}")
+                expiry_ms = 0  # fallback — Happ поймёт как "неопределённо"
         return {"uuid": uuid_val, "expiryTime": expiry_ms}
     return None
 
