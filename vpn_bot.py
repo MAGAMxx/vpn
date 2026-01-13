@@ -343,10 +343,7 @@ def start_handler(message):
 
     # Уведомление админу о новом пользователе
     if is_new_user:
-        # Форматируем имя пользователя
         full_name = f"{first_name} {last_name}".strip() if first_name or last_name else "Не указано"
-
-        # Формируем информацию о реферере
         ref_info = ""
         if referrer_id:
             try:
@@ -355,8 +352,6 @@ def start_handler(message):
                 ref_info = f"\n👥 *Пригласил:* {referrer_username}"
             except:
                 ref_info = f"\n👥 *Пригласил:* ID: {referrer_id}"
-
-        # Отправляем уведомление админу
         admin_notification = (
             f"🎉 *НОВЫЙ ПОЛЬЗОВАТЕЛЬ!*\n\n"
             f"🆔 *ID:* `{user_id}`\n"
@@ -366,7 +361,6 @@ def start_handler(message):
             f"{ref_info}\n\n"
             f"📊 *Общее число пользователей:* {db.get_total_users_count()}"
         )
-
         try:
             bot.send_message(ADMIN_ID, admin_notification, parse_mode="Markdown")
         except Exception as e:
@@ -377,23 +371,31 @@ def start_handler(message):
 
     active_key = db.get_active_key(user_id)
     if not active_key:
-    u_uuid = str(uuid.uuid4())
-    email = f"trial_{user_id}*{int(time.time())}"
-    sub_id = add_user_to_xray(u_uuid, email, 3)
-    if sub_id:
-        db.add_key(user_id, u_uuid, SID, 3)  # сначала добавляем ключ
-        print(f"[DEBUG] Ключ добавлен в базу. u_uuid = {u_uuid}")
-        success = db.update_key_subid(u_uuid, sub_id)  # потом обновляем sub_id
-        print(f"[DEBUG] update_key_subid вернул: {success} для sub_id {sub_id}")
-        text = (
-            f"🎆*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
-            f"📱 Социальные сети и мессенджеры без блокировок\n"
-            f"🌍 Полная анонимность, высокая скорость и стабильное соединение\n"
-            f"🚀 Instagram, YouTube, WhatsApp — заходи где угодно!\n"
-            f"😍Вам доступен бонус - 3 дня. Перейдите в (Мой ключ)"
-        )
-    else:
-        text = f"{EMOJI['cross']} *Ошибка триала*"
+        u_uuid = str(uuid.uuid4())
+        email = f"trial_{user_id}*{int(time.time())}"
+        sub_id = add_user_to_xray(u_uuid, email, 3)
+        if sub_id:
+            # Сначала добавляем ключ в базу (чтобы запись существовала)
+            db.add_key(user_id, u_uuid, SID, 3)
+            print(f"[DEBUG] Ключ добавлен в базу. u_uuid = {u_uuid}")
+
+            # Теперь обновляем sub_id
+            success = db.update_key_subid(u_uuid, sub_id)
+            print(f"[DEBUG] update_key_subid вернул: {success} для sub_id {sub_id}")
+
+            # Проверяем, что sub_id реально сохранился
+            saved_sub_id = db.get_key_subid(u_uuid)
+            print(f"[DEBUG] Проверяем sub_id из базы по uuid: {saved_sub_id}")
+
+            text = (
+                f"🎆*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
+                f"📱 Социальные сети и мессенджеры без блокировок\n"
+                f"🌍 Полная анонимность, высокая скорость и стабильное соединение\n"
+                f"🚀 Instagram, YouTube, WhatsApp — заходи где угодно!\n"
+                f"😍Вам доступен бонус - 3 дня. Перейдите в (Мой ключ)"
+            )
+        else:
+            text = f"{EMOJI['cross']} *Ошибка триала*"
     else:
         text = (
             f"🎆*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
