@@ -978,6 +978,24 @@ def notify_expiry_warning():
 
         time.sleep(86400)  # Проверять раз в сутки (24 часа)
 
+def get_key_data_by_subid(sub_id):
+    cursor.execute("""
+        SELECT uuid, end_date FROM keys 
+        WHERE sub_id = ? AND is_active = 1
+    """, (sub_id,))
+    row = cursor.fetchone()
+    if row and row[0]:
+        uuid_val, end_date_str = row
+        expiry_ms = 0
+        if end_date_str:
+            try:
+                end_date = datetime.datetime.fromisoformat(end_date_str)
+                expiry_ms = int(end_date.timestamp() * 1000)  # миллисекунды для Happ
+            except ValueError:
+                print(f"[DB ERROR] Некорректная дата для sub_id {sub_id}: {end_date_str}")
+        return {"uuid": uuid_val, "expiryTime": expiry_ms}
+    return None
+
 
 flask_app = Flask(__name__)
 
