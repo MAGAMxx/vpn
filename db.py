@@ -95,7 +95,9 @@ def add_key(user_id, u_uuid, sid, days):
         VALUES (?, ?, ?, ?, ?, 1)
     """, (user_id, u_uuid, sid, start_date, end_date))
     
+    rows_affected = cursor.rowcount
     conn.commit()
+    print(f"[DEBUG DB] add_key вставил {rows_affected} строк для uuid {u_uuid}")
     return cursor.lastrowid
 
 def get_active_key(user_id):
