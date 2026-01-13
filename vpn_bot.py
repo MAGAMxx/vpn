@@ -377,21 +377,23 @@ def start_handler(message):
 
     active_key = db.get_active_key(user_id)
     if not active_key:
-        u_uuid = str(uuid.uuid4())
-        email = f"trial_{user_id}*{int(time.time())}"
-        sub_id = add_user_to_xray(u_uuid, email, 3)
-        if sub_id:
-            db.add_key(user_id, u_uuid, SID, 3)
-            db.update_key_subid(u_uuid, sub_id)
-            text = (
-                f"🎆*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
-                f"📱 Социальные сети и мессенджеры без блокировок\n"
-                f"🌍 Полная анонимность, высокая скорость и стабильное соединение\n"
-                f"🚀 Instagram, YouTube, WhatsApp — заходи где угодно!\n"
-                f"😍Вам доступен бонус - 3 дня. Перейдите в (Мой ключ)"
-            )
-        else:
-            text = f"{EMOJI['cross']} *Ошибка триала*"
+    u_uuid = str(uuid.uuid4())
+    email = f"trial_{user_id}*{int(time.time())}"
+    sub_id = add_user_to_xray(u_uuid, email, 3)
+    if sub_id:
+        db.add_key(user_id, u_uuid, SID, 3)  # сначала добавляем ключ
+        print(f"[DEBUG] Ключ добавлен в базу. u_uuid = {u_uuid}")
+        success = db.update_key_subid(u_uuid, sub_id)  # потом обновляем sub_id
+        print(f"[DEBUG] update_key_subid вернул: {success} для sub_id {sub_id}")
+        text = (
+            f"🎆*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
+            f"📱 Социальные сети и мессенджеры без блокировок\n"
+            f"🌍 Полная анонимность, высокая скорость и стабильное соединение\n"
+            f"🚀 Instagram, YouTube, WhatsApp — заходи где угодно!\n"
+            f"😍Вам доступен бонус - 3 дня. Перейдите в (Мой ключ)"
+        )
+    else:
+        text = f"{EMOJI['cross']} *Ошибка триала*"
     else:
         text = (
             f"🎆*MAGAMIX VPN — твой пропуск в свободный интернет!*⚡\n\n"
